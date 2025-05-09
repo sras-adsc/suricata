@@ -142,7 +142,7 @@ static TmEcode DecodeNFQ(ThreadVars *, Packet *, void *);
 static TmEcode DecodeNFQThreadInit(ThreadVars *, const void *, void **);
 static TmEcode DecodeNFQThreadDeinit(ThreadVars *tv, void *data);
 
-static TmEcode NFQSetVerdict(Packet *p, const uint32_t mark_value, const bool mark_modified);
+static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, const bool mark_modified);
 static void NFQReleasePacket(Packet *p);
 
 typedef enum NFQMode_ {
@@ -325,7 +325,7 @@ static void NFQVerdictCacheFlush(NFQQueueVars *t)
 }
 
 static int NFQVerdictCacheAdd(NFQQueueVars *t, Packet *p, const uint32_t verdict,
-        const uint32_t mark_value, const bool mark_modified)
+        uint32_t mark_value, const bool mark_modified)
 {
 #ifdef HAVE_NFQ_SET_VERDICT_BATCH
     if (t->verdict_cache.maxlen == 0)
@@ -1097,7 +1097,7 @@ static inline void UpdateCounters(NFQQueueVars *t, const Packet *p)
  *  \brief NFQ verdict function
  *  \param p Packet to work with. Will be the tunnel root packet in case of tunnel.
  */
-static TmEcode NFQSetVerdict(Packet *p, const uint32_t mark_value, const bool mark_modified)
+static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, const bool mark_modified)
 {
     int iter = 0;
     /* we could also have a direct pointer but we need to have a ref count in this case */
@@ -1118,6 +1118,27 @@ static TmEcode NFQSetVerdict(Packet *p, const uint32_t mark_value, const bool ma
     }
 
     uint32_t verdict = GetVerdict(p);
+
+    switch (verdict) {
+        case NF_DROP:
+            mark_value = 0x80000000;
+            switch (nfq_config.mode) {
+                default:
+                case NFQ_ACCEPT_MODE:
+                    verdict = NF_ACCEPT;
+                    break;
+                case NFQ_REPEAT_MODE:
+                    verdict = NF_REPEAT;
+                    break;
+                case NFQ_ROUTE_MODE:
+                    verdict = ((uint32_t) NF_QUEUE) | nfq_config.next_queue;
+                    break;
+            }
+            break;
+        default:
+            mark_value = 0x40000000;
+    }
+
 #ifdef COUNTERS
     UpdateCounters(t, p);
 #endif /* COUNTERS */
