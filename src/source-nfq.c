@@ -142,7 +142,7 @@ static TmEcode DecodeNFQ(ThreadVars *, Packet *, void *);
 static TmEcode DecodeNFQThreadInit(ThreadVars *, const void *, void **);
 static TmEcode DecodeNFQThreadDeinit(ThreadVars *tv, void *data);
 
-static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, const bool mark_modified);
+static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, bool mark_modified);
 static void NFQReleasePacket(Packet *p);
 
 typedef enum NFQMode_ {
@@ -325,7 +325,7 @@ static void NFQVerdictCacheFlush(NFQQueueVars *t)
 }
 
 static int NFQVerdictCacheAdd(NFQQueueVars *t, Packet *p, const uint32_t verdict,
-        uint32_t mark_value, const bool mark_modified)
+        const uint32_t mark_value, const bool mark_modified)
 {
 #ifdef HAVE_NFQ_SET_VERDICT_BATCH
     if (t->verdict_cache.maxlen == 0)
@@ -602,6 +602,7 @@ static TmEcode NFQInitThread(NFQThreadVars *t, uint32_t queue_maxlen)
     }
     SCLogDebug("opening library handle");
     q->h = nfq_open();
+    q->packet_counter = 0;
     if (q->h == NULL) {
         SCLogError("nfq_open() failed");
         return TM_ECODE_FAILED;
@@ -1097,7 +1098,7 @@ static inline void UpdateCounters(NFQQueueVars *t, const Packet *p)
  *  \brief NFQ verdict function
  *  \param p Packet to work with. Will be the tunnel root packet in case of tunnel.
  */
-static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, const bool mark_modified)
+static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, bool mark_modified)
 {
     int iter = 0;
     /* we could also have a direct pointer but we need to have a ref count in this case */
@@ -1119,6 +1120,7 @@ static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, const bool mark_mod
 
     uint32_t verdict = GetVerdict(p);
 
+    // Note: we are overwriting any set bits in the mark
     switch (verdict) {
         case NF_DROP:
             mark_value = 0x80000000;
@@ -1136,12 +1138,21 @@ static TmEcode NFQSetVerdict(Packet *p, uint32_t mark_value, const bool mark_mod
             }
             break;
         default:
-            mark_value = 0x40000000;
+            mark_value = 0x00000000;
     }
+    mark_value |= t->packet_counter;
+    mark_modified = true;
 
 #ifdef COUNTERS
     UpdateCounters(t, p);
 #endif /* COUNTERS */
+
+    // Increment the packet counter
+    if (t->packet_counter == 0xffffff) {
+        t->packet_counter = 0;
+    } else {
+        t->packet_counter++;
+    }
 
     int ret = NFQVerdictCacheAdd(t, p, verdict, mark_value, mark_modified);
     if (ret == 0) {

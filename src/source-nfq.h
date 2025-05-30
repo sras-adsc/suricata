@@ -74,6 +74,7 @@ typedef struct NFQQueueVars_
     uint32_t accepted;
     uint32_t dropped;
     uint32_t replaced;
+    uint32_t packet_counter;
     struct {
         uint32_t packet_id; /* id of last processed packet */
         uint32_t verdict;
