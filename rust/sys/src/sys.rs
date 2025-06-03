@@ -43,8 +43,9 @@ pub enum AppProtoEnum {
     ALPROTO_HTTP2 = 34,
     ALPROTO_BITTORRENT_DHT = 35,
     ALPROTO_POP3 = 36,
-    ALPROTO_HTTP = 37,
-    ALPROTO_MAX_STATIC = 38,
+    ALPROTO_MDNS = 37,
+    ALPROTO_HTTP = 38,
+    ALPROTO_MAX_STATIC = 39,
 }
 pub type AppProto = u16;
 extern "C" {
@@ -176,6 +177,9 @@ extern "C" {
         KeywordsRegister: ::std::option::Option<unsafe extern "C" fn()>,
     ) -> ::std::os::raw::c_int;
 }
+extern "C" {
+    pub fn SCDetectHelperKeywordSetCleanCString(id: u16);
+}
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct DetectEngineCtx_ {
@@ -188,10 +192,231 @@ pub struct Signature_ {
     _unused: [u8; 0],
 }
 pub type Signature = Signature_;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SigMatch_ {
+    _unused: [u8; 0],
+}
+pub type SigMatch = SigMatch_;
 extern "C" {
     pub fn SCDetectBufferSetActiveList(
         de_ctx: *mut DetectEngineCtx, s: *mut Signature, list: ::std::os::raw::c_int,
     ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCDetectSignatureAddTransform(
+        s: *mut Signature, transform: ::std::os::raw::c_int, options: *mut ::std::os::raw::c_void,
+    ) -> ::std::os::raw::c_int;
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct InspectionBuffer {
+    #[doc = "< active pointer, points either to ::buf or ::orig"]
+    pub inspect: *const u8,
+    pub inspect_offset: u64,
+    #[doc = "< size of active data. See to ::len or ::orig_len"]
+    pub inspect_len: u32,
+    #[doc = "< is initialized. ::inspect might be NULL if transform lead to 0 size"]
+    pub initialized: bool,
+    #[doc = "< DETECT_CI_FLAGS_* for use with DetectEngineContentInspection"]
+    pub flags: u8,
+    #[doc = "< how much is in use"]
+    pub len: u32,
+    pub buf: *mut u8,
+    #[doc = "< size of the memory allocation"]
+    pub size: u32,
+    pub orig_len: u32,
+    pub orig: *const u8,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct DetectEngineThreadCtx_ {
+    _unused: [u8; 0],
+}
+pub type DetectEngineThreadCtx = DetectEngineThreadCtx_;
+extern "C" {
+    pub fn SCInspectionBufferCheckAndExpand(
+        buffer: *mut InspectionBuffer, min_size: u32,
+    ) -> *mut u8;
+}
+extern "C" {
+    pub fn SCInspectionBufferTruncate(buffer: *mut InspectionBuffer, buf_len: u32);
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct Flow_ {
+    _unused: [u8; 0],
+}
+pub type Flow = Flow_;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SigMatchCtx_ {
+    _unused: [u8; 0],
+}
+pub type SigMatchCtx = SigMatchCtx_;
+pub type InspectionMultiBufferGetDataPtr = ::std::option::Option<
+    unsafe extern "C" fn(
+        det_ctx: *mut DetectEngineThreadCtx_,
+        txv: *const ::std::os::raw::c_void,
+        flow_flags: u8,
+        local_id: u32,
+        buf: *mut *const u8,
+        buf_len: *mut u32,
+    ) -> bool,
+>;
+pub type InspectionSingleBufferGetDataPtr = ::std::option::Option<
+    unsafe extern "C" fn(
+        txv: *const ::std::os::raw::c_void,
+        flow_flags: u8,
+        buf: *mut *const u8,
+        buf_len: *mut u32,
+    ) -> bool,
+>;
+#[doc = " App-layer light version of SigTableElmt"]
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SCSigTableAppLiteElmt {
+    #[doc = " keyword name"]
+    pub name: *const ::std::os::raw::c_char,
+    #[doc = " keyword description"]
+    pub desc: *const ::std::os::raw::c_char,
+    #[doc = " keyword documentation url"]
+    pub url: *const ::std::os::raw::c_char,
+    #[doc = " flags SIGMATCH_*"]
+    pub flags: u16,
+    #[doc = " function callback to parse and setup keyword in rule"]
+    pub Setup: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut DetectEngineCtx,
+            arg2: *mut Signature,
+            arg3: *const ::std::os::raw::c_char,
+        ) -> ::std::os::raw::c_int,
+    >,
+    #[doc = " function callback to free structure allocated by setup if any"]
+    pub Free: ::std::option::Option<
+        unsafe extern "C" fn(arg1: *mut DetectEngineCtx, arg2: *mut ::std::os::raw::c_void),
+    >,
+    #[doc = " function callback to match on an app-layer transaction"]
+    pub AppLayerTxMatch: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut DetectEngineThreadCtx,
+            arg2: *mut Flow,
+            flags: u8,
+            alstate: *mut ::std::os::raw::c_void,
+            txv: *mut ::std::os::raw::c_void,
+            arg3: *const Signature,
+            arg4: *const SigMatchCtx,
+        ) -> ::std::os::raw::c_int,
+    >,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct SCTransformTableElmt {
+    pub name: *const ::std::os::raw::c_char,
+    pub desc: *const ::std::os::raw::c_char,
+    pub url: *const ::std::os::raw::c_char,
+    pub flags: u16,
+    pub Setup: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut DetectEngineCtx,
+            arg2: *mut Signature,
+            arg3: *const ::std::os::raw::c_char,
+        ) -> ::std::os::raw::c_int,
+    >,
+    pub Free: ::std::option::Option<
+        unsafe extern "C" fn(arg1: *mut DetectEngineCtx, arg2: *mut ::std::os::raw::c_void),
+    >,
+    pub Transform: ::std::option::Option<
+        unsafe extern "C" fn(
+            arg1: *mut DetectEngineThreadCtx,
+            arg2: *mut InspectionBuffer,
+            context: *mut ::std::os::raw::c_void,
+        ),
+    >,
+    pub TransformValidate: ::std::option::Option<
+        unsafe extern "C" fn(
+            content: *const u8,
+            content_len: u16,
+            context: *mut ::std::os::raw::c_void,
+        ) -> bool,
+    >,
+    pub TransformId: ::std::option::Option<
+        unsafe extern "C" fn(
+            id_data: *mut *const u8,
+            id_length: *mut u32,
+            context: *mut ::std::os::raw::c_void,
+        ),
+    >,
+}
+extern "C" {
+    pub fn SCDetectHelperNewKeywordId() -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCDetectHelperKeywordRegister(kw: *const SCSigTableAppLiteElmt) -> u16;
+}
+extern "C" {
+    pub fn SCDetectHelperKeywordAliasRegister(kwid: u16, alias: *const ::std::os::raw::c_char);
+}
+extern "C" {
+    pub fn SCDetectHelperBufferRegister(
+        name: *const ::std::os::raw::c_char, alproto: AppProto, direction: u8,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCDetectHelperBufferMpmRegister(
+        name: *const ::std::os::raw::c_char, desc: *const ::std::os::raw::c_char,
+        alproto: AppProto, direction: u8, GetData: InspectionSingleBufferGetDataPtr,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCDetectHelperMultiBufferMpmRegister(
+        name: *const ::std::os::raw::c_char, desc: *const ::std::os::raw::c_char,
+        alproto: AppProto, direction: u8, GetData: InspectionMultiBufferGetDataPtr,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCDetectHelperMultiBufferProgressMpmRegister(
+        name: *const ::std::os::raw::c_char, desc: *const ::std::os::raw::c_char,
+        alproto: AppProto, direction: u8, GetData: InspectionMultiBufferGetDataPtr,
+        progress: ::std::os::raw::c_int,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCDetectHelperTransformRegister(
+        kw: *const SCTransformTableElmt,
+    ) -> ::std::os::raw::c_int;
+}
+extern "C" {
+    pub fn SCSigMatchAppendSMToList(
+        arg1: *mut DetectEngineCtx, arg2: *mut Signature, arg3: u16, arg4: *mut SigMatchCtx,
+        arg5: ::std::os::raw::c_int,
+    ) -> *mut SigMatch;
+}
+extern "C" {
+    pub fn SCDetectSignatureSetAppProto(
+        s: *mut Signature, alproto: AppProto,
+    ) -> ::std::os::raw::c_int;
+}
+#[repr(i32)]
+#[doc = " \\brief The various log levels\n NOTE: when adding new level, don't forget to update SCLogMapLogLevelToSyslogLevel()\n      or it may result in logging to syslog with LOG_EMERG priority."]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum SCLogLevel {
+    SC_LOG_NOTSET = -1,
+    SC_LOG_NONE = 0,
+    SC_LOG_ERROR = 1,
+    SC_LOG_WARNING = 2,
+    SC_LOG_NOTICE = 3,
+    SC_LOG_INFO = 4,
+    SC_LOG_PERF = 5,
+    SC_LOG_CONFIG = 6,
+    SC_LOG_DEBUG = 7,
+    SC_LOG_LEVEL_MAX = 8,
+}
+extern "C" {
+    pub fn SCFatalErrorOnInitStatic(arg1: *const ::std::os::raw::c_char);
+}
+extern "C" {
+    pub fn SCLogGetLogLevel() -> SCLogLevel;
 }
 #[doc = " Structure of a configuration parameter."]
 #[repr(C)]

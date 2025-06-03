@@ -749,14 +749,14 @@ static int TxNonPFAddSig(DetectEngineCtx *de_ctx, HashListTable *tx_engines_hash
         bool found = false;
         // avoid adding same sid multiple times
         for (uint32_t y = 0; y < e->sigs_cnt; y++) {
-            if (e->sigs[y].sid == s->num) {
+            if (e->sigs[y].sid == s->iid) {
                 found = true;
                 break;
             }
         }
         if (!found) {
             BUG_ON(e->sigs_cnt == max_sids);
-            e->sigs[e->sigs_cnt].sid = s->num;
+            e->sigs[e->sigs_cnt].sid = s->iid;
             e->sigs[e->sigs_cnt].value = alproto;
             e->sigs_cnt++;
         }
@@ -777,7 +777,7 @@ static int TxNonPFAddSig(DetectEngineCtx *de_ctx, HashListTable *tx_engines_hash
         return -1;
     }
     add->sigs_cnt = 0;
-    add->sigs[add->sigs_cnt].sid = s->num;
+    add->sigs[add->sigs_cnt].sid = s->iid;
     add->sigs[add->sigs_cnt].value = alproto;
     add->sigs_cnt++;
 
@@ -915,7 +915,7 @@ static int SetupNonPrefilter(DetectEngineCtx *de_ctx, SigGroupHead *sgh)
                 type = 0;
                 value = s->alproto;
             }
-            pkt_hook_flow_start_non_pf_array[pkt_hook_flow_start_non_pf_array_size].sid = s->num;
+            pkt_hook_flow_start_non_pf_array[pkt_hook_flow_start_non_pf_array_size].sid = s->iid;
             pkt_hook_flow_start_non_pf_array[pkt_hook_flow_start_non_pf_array_size].value = value;
             pkt_hook_flow_start_non_pf_array[pkt_hook_flow_start_non_pf_array_size].type = type;
             pkt_hook_flow_start_non_pf_array[pkt_hook_flow_start_non_pf_array_size].pkt.sig_mask =
@@ -960,7 +960,7 @@ static int SetupNonPrefilter(DetectEngineCtx *de_ctx, SigGroupHead *sgh)
                     frame_type = f->type;
                     frame_non_pf = true;
 
-                    frame_non_pf_array[frame_non_pf_array_size].sid = s->num;
+                    frame_non_pf_array[frame_non_pf_array_size].sid = s->iid;
                     frame_non_pf_array[frame_non_pf_array_size].value = s->alproto;
                     frame_non_pf_array[frame_non_pf_array_size].frame.type = frame_type;
                     frame_non_pf_array_size++;
@@ -1052,7 +1052,7 @@ static int SetupNonPrefilter(DetectEngineCtx *de_ctx, SigGroupHead *sgh)
 #endif
             }
 
-            pkt_non_pf_array[pkt_non_pf_array_size].sid = s->num;
+            pkt_non_pf_array[pkt_non_pf_array_size].sid = s->iid;
             pkt_non_pf_array[pkt_non_pf_array_size].value = value;
             pkt_non_pf_array[pkt_non_pf_array_size].type = type;
             pkt_non_pf_array[pkt_non_pf_array_size].pkt.sig_mask = s->mask;
@@ -1499,10 +1499,48 @@ const char *PrefilterStoreGetName(const uint32_t id)
 
 typedef struct PrefilterMpmCtx {
     int list_id;
-    InspectionBufferGetDataPtr GetData;
+    union {
+        InspectionBufferGetDataPtr GetData;
+        InspectionSingleBufferGetDataPtr GetDataSingle;
+    };
     const MpmCtx *mpm_ctx;
     const DetectEngineTransforms *transforms;
 } PrefilterMpmCtx;
+
+/** \brief Generic Mpm prefilter callback for simple InspectionSingleBufferGetDataPtr
+ *
+ *  \param det_ctx detection engine thread ctx
+ *  \param p packet to inspect
+ *  \param f flow to inspect
+ *  \param txv tx to inspect
+ *  \param pectx inspection context
+ */
+static void PrefilterMpmTxSingle(DetectEngineThreadCtx *det_ctx, const void *pectx, Packet *p,
+        Flow *f, void *txv, const uint64_t idx, const AppLayerTxData *_txd, const uint8_t flags)
+{
+    SCEnter();
+
+    const PrefilterMpmCtx *ctx = (const PrefilterMpmCtx *)pectx;
+    const MpmCtx *mpm_ctx = ctx->mpm_ctx;
+    SCLogDebug("running on list %d", ctx->list_id);
+
+    InspectionBuffer *buffer = DetectGetSingleData(
+            det_ctx, ctx->transforms, f, flags, txv, ctx->list_id, ctx->GetDataSingle);
+    if (buffer == NULL)
+        return;
+
+    const uint32_t data_len = buffer->inspect_len;
+    const uint8_t *data = buffer->inspect;
+
+    SCLogDebug("mpm'ing buffer:");
+    // PrintRawDataFp(stdout, data, data_len);
+
+    if (data != NULL && data_len >= mpm_ctx->minlen) {
+        (void)mpm_table[mpm_ctx->mpm_type].Search(
+                mpm_ctx, &det_ctx->mtc, &det_ctx->pmq, data, data_len);
+        PREFILTER_PROFILING_ADD_BYTES(det_ctx, data_len);
+    }
+}
 
 /** \brief Generic Mpm prefilter callback
  *
@@ -1521,8 +1559,7 @@ static void PrefilterMpm(DetectEngineThreadCtx *det_ctx, const void *pectx, Pack
     const MpmCtx *mpm_ctx = ctx->mpm_ctx;
     SCLogDebug("running on list %d", ctx->list_id);
 
-    InspectionBuffer *buffer = ctx->GetData(det_ctx, ctx->transforms,
-            f, flags, txv, ctx->list_id);
+    InspectionBuffer *buffer = ctx->GetData(det_ctx, ctx->transforms, f, flags, txv, ctx->list_id);
     if (buffer == NULL)
         return;
 
@@ -1559,6 +1596,26 @@ int PrefilterGenericMpmRegister(DetectEngineCtx *de_ctx, SigGroupHead *sgh, MpmC
     int r = PrefilterAppendTxEngine(de_ctx, sgh, PrefilterMpm,
         mpm_reg->app_v2.alproto, mpm_reg->app_v2.tx_min_progress,
         pectx, PrefilterGenericMpmFree, mpm_reg->pname);
+    if (r != 0) {
+        SCFree(pectx);
+    }
+    return r;
+}
+
+int PrefilterSingleMpmRegister(DetectEngineCtx *de_ctx, SigGroupHead *sgh, MpmCtx *mpm_ctx,
+        const DetectBufferMpmRegistry *mpm_reg, int list_id)
+{
+    SCEnter();
+    PrefilterMpmCtx *pectx = SCCalloc(1, sizeof(*pectx));
+    if (pectx == NULL)
+        return -1;
+    pectx->list_id = list_id;
+    pectx->GetDataSingle = mpm_reg->app_v2.GetDataSingle;
+    pectx->mpm_ctx = mpm_ctx;
+    pectx->transforms = &mpm_reg->transforms;
+
+    int r = PrefilterAppendTxEngine(de_ctx, sgh, PrefilterMpmTxSingle, mpm_reg->app_v2.alproto,
+            mpm_reg->app_v2.tx_min_progress, pectx, PrefilterGenericMpmFree, mpm_reg->pname);
     if (r != 0) {
         SCFree(pectx);
     }
@@ -1715,7 +1772,7 @@ void PostRuleMatchWorkQueueAppend(
     det_ctx->post_rule_work_queue.q[det_ctx->post_rule_work_queue.len].sm_type = type;
     det_ctx->post_rule_work_queue.q[det_ctx->post_rule_work_queue.len].value = value;
 #ifdef DEBUG
-    det_ctx->post_rule_work_queue.q[det_ctx->post_rule_work_queue.len].id = s->num;
+    det_ctx->post_rule_work_queue.q[det_ctx->post_rule_work_queue.len].id = s->iid;
 #endif
     det_ctx->post_rule_work_queue.len++;
     SCLogDebug("det_ctx->post_rule_work_queue.len %u", det_ctx->post_rule_work_queue.len);

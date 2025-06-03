@@ -208,7 +208,7 @@ static int DetectDNP3FuncSetup(DetectEngineCtx *de_ctx, Signature *s, const char
     DetectDNP3 *dnp3 = NULL;
     uint8_t function_code;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
         return -1;
 
     if (!DetectDNP3FuncParseFunctionCode(str, &function_code)) {
@@ -222,7 +222,7 @@ static int DetectDNP3FuncSetup(DetectEngineCtx *de_ctx, Signature *s, const char
     }
     dnp3->function_code = function_code;
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_DNP3FUNC, (SigMatchCtx *)dnp3, g_dnp3_match_buffer_id) == NULL) {
         goto error;
     }
@@ -286,7 +286,7 @@ static int DetectDNP3IndSetup(DetectEngineCtx *de_ctx, Signature *s, const char 
     DetectDNP3 *detect = NULL;
     uint16_t flags;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
         return -1;
 
     if (!DetectDNP3IndParse(str, &flags)) {
@@ -300,7 +300,7 @@ static int DetectDNP3IndSetup(DetectEngineCtx *de_ctx, Signature *s, const char 
     }
     detect->ind_flags = flags;
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_DNP3IND, (SigMatchCtx *)detect, g_dnp3_match_buffer_id) == NULL) {
         goto error;
     }
@@ -353,7 +353,7 @@ static int DetectDNP3ObjSetup(DetectEngineCtx *de_ctx, Signature *s, const char 
     uint8_t variation;
     DetectDNP3 *detect = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
         return -1;
 
     if (!DetectDNP3ObjParse(str, &group, &variation)) {
@@ -367,7 +367,7 @@ static int DetectDNP3ObjSetup(DetectEngineCtx *de_ctx, Signature *s, const char 
     detect->obj_group = group;
     detect->obj_variation = variation;
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_DNP3OBJ, (SigMatchCtx *)detect, g_dnp3_match_buffer_id) == NULL) {
         goto fail;
     }
@@ -509,7 +509,7 @@ static void DetectDNP3ObjRegister(void)
 static int DetectDNP3DataSetup(DetectEngineCtx *de_ctx, Signature *s, const char *str)
 {
     SCEnter();
-    if (DetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_DNP3) != 0)
         return -1;
 
     if (SCDetectBufferSetActiveList(de_ctx, s, g_dnp3_data_buffer_id) != 0)

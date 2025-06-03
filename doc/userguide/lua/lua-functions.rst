@@ -7,6 +7,7 @@ Differences between `output` and `detect`:
 ------------------------------------------
 
 Currently, the ``needs`` key initialization varies, depending on what is the goal of the script: output or detection.
+The Lua script for the ``luaxform`` transform **does not use ``needs``**.
 
 If the script is for detection, the ``needs`` initialization should be as seen in the example below (see :ref:`lua-detection` for a complete example of a detection script):
 
@@ -24,7 +25,7 @@ For output logs, follow the pattern below. (The complete script structure can be
 
   function init (args)
       local needs = {}
-      needs["protocol"] = "http"
+      needs["protocol"] = "tls"
       return needs
   end
 
@@ -205,182 +206,6 @@ HttpGetResponseHeaders
       print(n,v)
   end
 
-TLS
----
-
-For log output, initialize with:
-
-::
-
-  function init (args)
-      local needs = {}
-      needs["protocol"] = "tls"
-      return needs
-  end
-
-For detection, initialization is as follows:
-
-::
-
-  function init (args)
-      local needs = {}
-      needs["tls"] = tostring(true)
-      return needs
-  end
-
-TlsGetVersion
-~~~~~~~~~~~~~
-
-Get the negotiated version in a TLS session as a string through TlsGetVersion.
-
-Example:
-
-::
-
-  function log (args)
-      version = TlsGetVersion()
-      if version then
-          -- do something
-      end
-  end
-
-TlsGetCertInfo
-~~~~~~~~~~~~~~
-
-Make certificate information available to the script through TlsGetCertInfo.
-
-Example:
-
-::
-
-  function log (args)
-      version, subject, issuer, fingerprint = TlsGetCertInfo()
-      if version == nil then
-          return 0
-      end
-  end
-
-TlsGetCertChain
-~~~~~~~~~~~~~~~
-
-Make certificate chain available to the script through TlsGetCertChain.
-
-The output is an array of certificate with each certificate being an hash
-with `data` and `length` keys.
-
-Example:
-
-::
-
-  -- Use debian lua-luaossl coming from https://github.com/wahern/luaossl
-  local x509 = require"openssl.x509"
-
-     chain = TlsGetCertChain()
-     for k, v in pairs(chain) do
-        -- v.length is length of data
-        -- v.data is raw binary data of certificate
-        cert = x509.new(v["data"], "DER")
-        print(cert:text() .. "\n")
-     end
-
-
-TlsGetCertNotAfter
-~~~~~~~~~~~~~~~~~~
-
-Get the Unix timestamp of end of validity of certificate.
-
-Example:
-
-::
-
-  function log (args)
-      notafter = TlsGetCertNotAfter()
-      if notafter < os.time() then
-          -- expired certificate
-      end
-  end
-
-TlsGetCertNotBefore
-~~~~~~~~~~~~~~~~~~~
-
-Get the Unix timestamp of beginning of validity of certificate.
-
-Example:
-
-::
-
-  function log (args)
-      notbefore = TlsGetCertNotBefore()
-      if notbefore > os.time() then
-          -- not yet valid certificate
-      end
-  end
-
-TlsGetCertSerial
-~~~~~~~~~~~~~~~~
-
-Get TLS certificate serial number through TlsGetCertSerial.
-
-Example:
-
-::
-
-  function log (args)
-      serial = TlsGetCertSerial()
-      if serial then
-          -- do something
-      end
-  end
-
-TlsGetSNI
-~~~~~~~~~
-
-Get the Server name Indication from a TLS connection.
-
-Example:
-
-::
-
-  function log (args)
-      asked_domain = TlsGetSNI()
-      if string.find(asked_domain, "badguys") then
-          -- ok connection to bad guys let's do something
-      end
-  end
-
-Files
------
-
-To use the file logging API, the script's init() function needs to look like:
-
-::
-
-  function init (args)
-      local needs = {}
-      needs['type'] = 'file'
-      return needs
-  end
-
-SCFileInfo
-~~~~~~~~~~
-
-::
-
-
-  fileid, txid, name, size, magic, md5, sha1, sha256 = SCFileInfo()
-
-returns fileid (number), txid (number), name (string), size (number),
-magic (string), md5 in hex (string), sha1 (string), sha256 (string)
-
-SCFileState
-~~~~~~~~~~~
-
-::
-
-  state, stored = SCFileState()
-
-returns state (string), stored (bool)
-
 Streaming Data
 --------------
 
@@ -455,7 +280,7 @@ index so in our case we need to use 0.
          SCFlowintSet(0, a + 1)
      else
          SCFlowintSet(0, 1)
-     end 
+     end
 
 SCFlowintGet
 ~~~~~~~~~~~~
@@ -489,17 +314,6 @@ SCThreadInfo
 
 It gives: tid (integer), tname (string), tgroup (string)
 
-SCLogError, SCLogWarning, SCLogNotice, SCLogInfo, SCLogDebug
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Print a message. It will go into the outputs defined in the
-yaml. Whether it will be printed depends on the log level.
-
-Example:
-
-::
-
-  SCLogError("some error message")
 
 SCLogPath
 ~~~~~~~~~

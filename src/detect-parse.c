@@ -75,82 +75,6 @@
 #include "action-globals.h"
 #include "util-validate.h"
 
-// file protocols with common file handling
-typedef struct {
-    AppProto alproto;
-    int direction;
-    int to_client_progress;
-    int to_server_progress;
-} DetectFileHandlerProtocol_t;
-
-/* Table with all filehandler registrations */
-DetectFileHandlerTableElmt filehandler_table[DETECT_TBLSIZE_STATIC];
-
-#define ALPROTO_WITHFILES_MAX 16
-
-// file protocols with common file handling
-DetectFileHandlerProtocol_t al_protocols[ALPROTO_WITHFILES_MAX] = {
-    { .alproto = ALPROTO_NFS, .direction = SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT },
-    { .alproto = ALPROTO_SMB, .direction = SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT },
-    { .alproto = ALPROTO_FTP, .direction = SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT },
-    { .alproto = ALPROTO_FTPDATA, .direction = SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT },
-    { .alproto = ALPROTO_HTTP1,
-            .direction = SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT,
-            .to_client_progress = HTP_RESPONSE_PROGRESS_BODY,
-            .to_server_progress = HTP_REQUEST_PROGRESS_BODY },
-    { .alproto = ALPROTO_HTTP2,
-            .direction = SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT,
-            .to_client_progress = HTTP2StateDataServer,
-            .to_server_progress = HTTP2StateDataClient },
-    { .alproto = ALPROTO_SMTP, .direction = SIG_FLAG_TOSERVER }, { .alproto = ALPROTO_UNKNOWN }
-};
-
-void DetectFileRegisterProto(
-        AppProto alproto, int direction, int to_client_progress, int to_server_progress)
-{
-    size_t i = 0;
-    while (i < ALPROTO_WITHFILES_MAX && al_protocols[i].alproto != ALPROTO_UNKNOWN) {
-        i++;
-    }
-    if (i == ALPROTO_WITHFILES_MAX) {
-        return;
-    }
-    al_protocols[i].alproto = alproto;
-    al_protocols[i].direction = direction;
-    al_protocols[i].to_client_progress = to_client_progress;
-    al_protocols[i].to_server_progress = to_server_progress;
-    if (i + 1 < ALPROTO_WITHFILES_MAX) {
-        al_protocols[i + 1].alproto = ALPROTO_UNKNOWN;
-    }
-}
-
-void DetectFileRegisterFileProtocols(DetectFileHandlerTableElmt *reg)
-{
-    for (size_t i = 0; i < g_alproto_max; i++) {
-        if (al_protocols[i].alproto == ALPROTO_UNKNOWN) {
-            break;
-        }
-        int direction = al_protocols[i].direction == 0
-                                ? (int)(SIG_FLAG_TOSERVER | SIG_FLAG_TOCLIENT)
-                                : al_protocols[i].direction;
-
-        if (direction & SIG_FLAG_TOCLIENT) {
-            DetectAppLayerMpmRegister(reg->name, SIG_FLAG_TOCLIENT, reg->priority, reg->PrefilterFn,
-                    reg->GetData, al_protocols[i].alproto, al_protocols[i].to_client_progress);
-            DetectAppLayerInspectEngineRegister(reg->name, al_protocols[i].alproto,
-                    SIG_FLAG_TOCLIENT, al_protocols[i].to_client_progress, reg->Callback,
-                    reg->GetData);
-        }
-        if (direction & SIG_FLAG_TOSERVER) {
-            DetectAppLayerMpmRegister(reg->name, SIG_FLAG_TOSERVER, reg->priority, reg->PrefilterFn,
-                    reg->GetData, al_protocols[i].alproto, al_protocols[i].to_server_progress);
-            DetectAppLayerInspectEngineRegister(reg->name, al_protocols[i].alproto,
-                    SIG_FLAG_TOSERVER, al_protocols[i].to_server_progress, reg->Callback,
-                    reg->GetData);
-        }
-    }
-}
-
 /* Table with all SigMatch registrations */
 SigTableElmt *sigmatch_table = NULL;
 
@@ -461,7 +385,7 @@ void SigTableApplyStrictCommandLineOption(const char *str)
  * \param new  The sig match to append.
  * \param list The list to append to.
  */
-SigMatch *SigMatchAppendSMToList(
+SigMatch *SCSigMatchAppendSMToList(
         DetectEngineCtx *de_ctx, Signature *s, uint16_t type, SigMatchCtx *ctx, const int list)
 {
     SigMatch *new = SigMatchAlloc();
@@ -2197,31 +2121,6 @@ void SigFree(DetectEngineCtx *de_ctx, Signature *s)
     SCFree(s);
 }
 
-int DetectSignatureAddTransform(Signature *s, int transform, void *options)
-{
-    /* we only support buffers */
-    if (s->init_data->list == 0) {
-        SCReturnInt(-1);
-    }
-    if (!s->init_data->list_set) {
-        SCLogError("transforms must directly follow stickybuffers");
-        SCReturnInt(-1);
-    }
-    if (s->init_data->transforms.cnt >= DETECT_TRANSFORMS_MAX) {
-        SCReturnInt(-1);
-    }
-
-    s->init_data->transforms.transforms[s->init_data->transforms.cnt].transform = transform;
-    s->init_data->transforms.transforms[s->init_data->transforms.cnt].options = options;
-
-    s->init_data->transforms.cnt++;
-    SCLogDebug("Added transform #%d [%s]",
-            s->init_data->transforms.cnt,
-            s->sig_str);
-
-    SCReturnInt(0);
-}
-
 /**
  * \brief this function is used to set multiple possible app-layer protos
  * \brief into the current signature (for example ja4 for both tls and quic)
@@ -2284,7 +2183,7 @@ int DetectSignatureSetMultiAppProto(Signature *s, const AppProto *alprotos)
                         // intersection is singleton, set it as usual
                         AppProto alproto = s->init_data->alprotos[0];
                         s->init_data->alprotos[0] = ALPROTO_UNKNOWN;
-                        return DetectSignatureSetAppProto(s, alproto);
+                        return SCDetectSignatureSetAppProto(s, alproto);
                     }
                     break;
                 }
@@ -2297,7 +2196,7 @@ int DetectSignatureSetMultiAppProto(Signature *s, const AppProto *alprotos)
         }
         if (alprotos[1] == ALPROTO_UNKNOWN) {
             // allow singleton, but call traditional setter
-            return DetectSignatureSetAppProto(s, alprotos[0]);
+            return SCDetectSignatureSetAppProto(s, alprotos[0]);
         }
         // first time we enforce alprotos
         for (AppProto i = 0; i < SIG_ALPROTO_MAX; i++) {
@@ -2310,7 +2209,7 @@ int DetectSignatureSetMultiAppProto(Signature *s, const AppProto *alprotos)
     return 0;
 }
 
-int DetectSignatureSetAppProto(Signature *s, AppProto alproto)
+int SCDetectSignatureSetAppProto(Signature *s, AppProto alproto)
 {
     if (!AppProtoIsValid(alproto)) {
         SCLogError("invalid alproto %u", alproto);
@@ -2908,7 +2807,7 @@ static Signature *SigInitHelper(
     if (sig->prio == -1)
         sig->prio = DETECT_DEFAULT_PRIO;
 
-    sig->num = de_ctx->signum;
+    sig->iid = de_ctx->signum;
     de_ctx->signum++;
 
     if (sig->alproto != ALPROTO_UNKNOWN) {
@@ -5304,7 +5203,7 @@ static int SigSetMultiAppProto(void)
     FAIL_IF(s->init_data->alprotos[2] != ALPROTO_UNKNOWN);
 
     // check single after multiple
-    FAIL_IF(DetectSignatureSetAppProto(s, 3) < 0);
+    FAIL_IF(SCDetectSignatureSetAppProto(s, 3) < 0);
     FAIL_IF(s->init_data->alprotos[0] != ALPROTO_UNKNOWN);
     FAIL_IF(s->alproto != 3);
     alprotos[0] = 4;
@@ -5322,7 +5221,7 @@ static int SigSetMultiAppProto(void)
     alprotos[3] = ALPROTO_UNKNOWN;
     FAIL_IF(DetectSignatureSetMultiAppProto(s, alprotos) < 0);
     // fail if set single not in multiple
-    FAIL_IF(DetectSignatureSetAppProto(s, 4) >= 0);
+    FAIL_IF(SCDetectSignatureSetAppProto(s, 4) >= 0);
 
     s->init_data->alprotos[0] = ALPROTO_UNKNOWN;
     s->alproto = ALPROTO_UNKNOWN;

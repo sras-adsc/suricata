@@ -20,20 +20,20 @@ use super::template::{TemplateTransaction, ALPROTO_TEMPLATE};
 use crate::conf::conf_get_node;
 /* TEMPLATE_END_REMOVE */
 use crate::core::{STREAM_TOCLIENT, STREAM_TOSERVER};
-use crate::detect::{
-    helper_keyword_register_sticky_buffer, DetectHelperBufferMpmRegister, DetectHelperGetData,
-    DetectSignatureSetAppProto, SigTableElmtStickyBuffer,
-};
+use crate::detect::{helper_keyword_register_sticky_buffer, SigTableElmtStickyBuffer};
 use crate::direction::Direction;
 use std::os::raw::{c_int, c_void};
-use suricata_sys::sys::{DetectEngineCtx, SCDetectBufferSetActiveList, Signature};
+use suricata_sys::sys::{
+    DetectEngineCtx, SCDetectBufferSetActiveList, SCDetectHelperBufferMpmRegister,
+    SCDetectSignatureSetAppProto, Signature,
+};
 
 static mut G_TEMPLATE_BUFFER_BUFFER_ID: c_int = 0;
 
 unsafe extern "C" fn template_buffer_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_TEMPLATE) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_TEMPLATE) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_TEMPLATE_BUFFER_BUFFER_ID) < 0 {
@@ -43,7 +43,7 @@ unsafe extern "C" fn template_buffer_setup(
 }
 
 /// Get the request/response buffer for a transaction from C.
-unsafe extern "C" fn template_buffer_get_data(
+unsafe extern "C" fn template_buffer_get(
     tx: *const c_void, flags: u8, buf: *mut *const u8, len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, TemplateTransaction);
@@ -59,21 +59,6 @@ unsafe extern "C" fn template_buffer_get_data(
         return true;
     }
     return false;
-}
-
-unsafe extern "C" fn template_buffer_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        template_buffer_get_data,
-    );
 }
 
 #[no_mangle]
@@ -93,11 +78,11 @@ pub unsafe extern "C" fn SCDetectTemplateRegister() {
         setup: template_buffer_setup,
     };
     let _g_template_buffer_kw_id = helper_keyword_register_sticky_buffer(&kw);
-    G_TEMPLATE_BUFFER_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_TEMPLATE_BUFFER_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"template.buffer\0".as_ptr() as *const libc::c_char,
         b"template.buffer intern description\0".as_ptr() as *const libc::c_char,
         ALPROTO_TEMPLATE,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        template_buffer_get,
+        Some(template_buffer_get),
     );
 }

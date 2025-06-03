@@ -36,11 +36,10 @@ use suricata::applayer::{
 };
 use suricata::conf::conf_get;
 use suricata::core::{ALPROTO_UNKNOWN, IPPROTO_TCP};
-use suricata::flow::Flow;
 use suricata::{
     build_slice, cast_pointer, export_state_data_get, export_tx_data_get, SCLogError, SCLogNotice,
 };
-use suricata_sys::sys::AppProto;
+use suricata_sys::sys::{AppProto, Flow};
 
 static mut TEMPLATE_MAX_TX: usize = 256;
 
@@ -282,9 +281,7 @@ unsafe extern "C" fn template_probing_parser(
     return ALPROTO_UNKNOWN;
 }
 
-extern "C" fn template_state_new(
-    _orig_state: *mut c_void, _orig_proto: AppProto,
-) -> *mut c_void {
+extern "C" fn template_state_new(_orig_state: *mut c_void, _orig_proto: AppProto) -> *mut c_void {
     let state = TemplateState::new();
     let boxed = Box::new(state);
     return Box::into_raw(boxed) as *mut c_void;

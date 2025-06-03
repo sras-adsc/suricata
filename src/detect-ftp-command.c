@@ -50,33 +50,28 @@ static int DetectFtpCommandSetup(DetectEngineCtx *de_ctx, Signature *s, const ch
     if (SCDetectBufferSetActiveList(de_ctx, s, g_ftp_cmd_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *DetectFTPCommandGetData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool DetectFTPCommandGetData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **buffer, uint32_t *buffer_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        FTPTransaction *tx = (FTPTransaction *)txv;
+    FTPTransaction *tx = (FTPTransaction *)txv;
 
-        if (tx->command_descriptor.command_code == FTP_COMMAND_UNKNOWN)
-            return NULL;
+    if (tx->command_descriptor.command_code == FTP_COMMAND_UNKNOWN)
+        return false;
 
-        const char *b = NULL;
-        uint8_t b_len = 0;
-        if (SCGetFtpCommandInfo(tx->command_descriptor.command_index, &b, NULL, &b_len)) {
-            InspectionBufferSetupAndApplyTransforms(
-                    det_ctx, list_id, buffer, (const uint8_t *)b, b_len, transforms);
-        } else {
-            return NULL;
-        }
+    uint8_t b_len = 0;
+    if (SCGetFtpCommandInfo(
+                tx->command_descriptor.command_index, (const char **)buffer, NULL, &b_len)) {
+        *buffer_len = b_len;
+        return true;
+    } else {
+        return false;
     }
-    return buffer;
 }
 
 void DetectFtpCommandRegister(void)
@@ -88,7 +83,7 @@ void DetectFtpCommandRegister(void)
     sigmatch_table[DETECT_FTP_COMMAND].Setup = DetectFtpCommandSetup;
     sigmatch_table[DETECT_FTP_COMMAND].flags |= SIGMATCH_NOOPT;
 
-    g_ftp_cmd_buffer_id = DetectHelperBufferMpmRegister(
+    g_ftp_cmd_buffer_id = SCDetectHelperBufferMpmRegister(
             BUFFER_NAME, BUFFER_DESC, ALPROTO_FTP, STREAM_TOSERVER, DetectFTPCommandGetData);
 
     SCLogDebug("registering " BUFFER_NAME " rule option");

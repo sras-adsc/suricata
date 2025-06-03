@@ -10,13 +10,16 @@ environment without access to additional modules.
 
    base64
    dns
+   file
    flowlib
    flowint
    flowvar
    hashlib
    http
+   log
    packetlib
    rule
    smtp
    ssh
+   tls
    ja3

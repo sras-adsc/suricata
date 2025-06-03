@@ -24,25 +24,14 @@
 #ifndef SURICATA_DETECT_PARSE_H
 #define SURICATA_DETECT_PARSE_H
 
-#include "detect.h"
-#include "detect-engine-mpm.h"
-
-/* File handler registration */
-#define MAX_DETECT_ALPROTO_CNT 10
-typedef struct DetectFileHandlerTableElmt_ {
-    const char *name;
-    int priority;
-    PrefilterRegisterFunc PrefilterFn;
-    InspectEngineFuncPtr Callback;
-    InspectionBufferGetDataPtr GetData;
-    int al_protocols[MAX_DETECT_ALPROTO_CNT];
-    int tx_progress;
-    int progress;
-} DetectFileHandlerTableElmt;
-void DetectFileRegisterFileProtocols(DetectFileHandlerTableElmt *entry);
-
-/* File registration table */
-extern DetectFileHandlerTableElmt filehandler_table[DETECT_TBLSIZE_STATIC];
+#include "app-layer-protos.h"
+#include "detect-engine-register.h"
+// types from detect.h with only forward declarations for bindgen
+typedef struct DetectEngineCtx_ DetectEngineCtx;
+typedef struct Signature_ Signature;
+typedef struct SigMatchCtx_ SigMatchCtx;
+typedef struct SigMatch_ SigMatch;
+typedef struct SigMatchData_ SigMatchData;
 
 /** Flags to indicate if the Signature parsing must be done
 *   switching the source and dest (for ip addresses and ports)
@@ -59,12 +48,6 @@ enum {
     SIG_DIREC_DST
 };
 
-typedef struct DetectParseRegex {
-    pcre2_code *regex;
-    pcre2_match_context *context;
-    struct DetectParseRegex *next;
-} DetectParseRegex;
-
 /* prototypes */
 int SignatureInitDataBufferCheckExpand(Signature *s);
 Signature *SigAlloc(void);
@@ -75,7 +58,7 @@ void SigParseRegisterTests(void);
 Signature *DetectEngineAppendSig(DetectEngineCtx *, const char *);
 Signature *DetectFirewallRuleAppendNew(DetectEngineCtx *, const char *);
 
-SigMatch *SigMatchAppendSMToList(DetectEngineCtx *, Signature *, uint16_t, SigMatchCtx *, int);
+SigMatch *SCSigMatchAppendSMToList(DetectEngineCtx *, Signature *, uint16_t, SigMatchCtx *, int);
 void SigMatchRemoveSMFromList(Signature *, SigMatch *, int);
 int SigMatchListSMBelongsTo(const Signature *, const SigMatch *);
 
@@ -101,11 +84,17 @@ SigMatch *DetectGetLastSMFromLists(const Signature *s, ...);
 SigMatch *DetectGetLastSMByListPtr(const Signature *s, SigMatch *sm_list, ...);
 SigMatch *DetectGetLastSMByListId(const Signature *s, int list_id, ...);
 
-int DetectSignatureAddTransform(Signature *s, int transform, void *options);
-int WARN_UNUSED DetectSignatureSetAppProto(Signature *s, AppProto alproto);
+int WARN_UNUSED SCDetectSignatureSetAppProto(Signature *s, AppProto alproto);
 int WARN_UNUSED DetectSignatureSetMultiAppProto(Signature *s, const AppProto *alprotos);
 
 /* parse regex setup and free util funcs */
+
+#ifndef SURICATA_BINDGEN_H
+typedef struct DetectParseRegex {
+    pcre2_code *regex;
+    pcre2_match_context *context;
+    struct DetectParseRegex *next;
+} DetectParseRegex;
 
 DetectParseRegex *DetectSetupPCRE2(const char *parse_str, int opts);
 bool DetectSetupParseRegexesOpts(const char *parse_str, DetectParseRegex *parse_regex, int opts);
@@ -121,6 +110,7 @@ int SC_Pcre2SubstringCopy(
         pcre2_match_data *match_data, uint32_t number, PCRE2_UCHAR *buffer, PCRE2_SIZE *bufflen);
 int SC_Pcre2SubstringGet(pcre2_match_data *match_data, uint32_t number, PCRE2_UCHAR **bufferptr,
         PCRE2_SIZE *bufflen);
+#endif
 
 void DetectRegisterAppLayerHookLists(void);
 

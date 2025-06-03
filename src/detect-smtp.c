@@ -28,6 +28,8 @@
 #include "detect-engine-buffer.h"
 #include "detect-engine-content-inspection.h"
 #include "detect-engine-helper.h"
+#include "detect-engine-mpm.h"
+#include "detect-engine-prefilter.h"
 #include "detect-parse.h"
 #include "app-layer-smtp.h"
 #include "rust.h"
@@ -41,7 +43,7 @@ static int DetectSmtpHeloSetup(DetectEngineCtx *de_ctx, Signature *s, const char
     if (SCDetectBufferSetActiveList(de_ctx, s, g_smtp_helo_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
@@ -69,25 +71,21 @@ static int DetectSmtpMailFromSetup(DetectEngineCtx *de_ctx, Signature *s, const 
     if (SCDetectBufferSetActiveList(de_ctx, s, g_smtp_mail_from_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetSmtpMailFromData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetSmtpMailFromData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-        if (tx->mail_from == NULL || tx->mail_from_len == 0)
-            return NULL;
-        InspectionBufferSetup(det_ctx, list_id, buffer, tx->mail_from, tx->mail_from_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mail_from == NULL)
+        return false;
+    *data = tx->mail_from;
+    *data_len = tx->mail_from_len;
+    return true;
 }
 
 static int DetectSmtpRcptToSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -95,7 +93,7 @@ static int DetectSmtpRcptToSetup(DetectEngineCtx *de_ctx, Signature *s, const ch
     if (SCDetectBufferSetActiveList(de_ctx, s, g_smtp_rcpt_to_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
@@ -136,17 +134,21 @@ void SCDetectSMTPRegister(void)
     kw.url = "/rules/smtp-keywords.html#smtp-helo";
     kw.Setup = DetectSmtpHeloSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_smtp_helo_buffer_id = DetectHelperBufferMpmRegister(
-            "smtp.helo", "SMTP helo", ALPROTO_SMTP, STREAM_TOSERVER, GetSmtpHeloData);
+    SCDetectHelperKeywordRegister(&kw);
+    DetectAppLayerInspectEngineRegister("smtp.helo", ALPROTO_SMTP, SIG_FLAG_TOSERVER, 0,
+            DetectEngineInspectBufferGeneric, GetSmtpHeloData);
+    DetectAppLayerMpmRegister("smtp.helo", SIG_FLAG_TOSERVER, 2, PrefilterGenericMpmRegister,
+            GetSmtpHeloData, ALPROTO_SMTP, 0);
+    DetectBufferTypeSetDescriptionByName("smtp.helo", "SMTP helo");
+    g_smtp_helo_buffer_id = DetectBufferTypeGetByName("smtp.helo");
 
     kw.name = "smtp.mail_from";
     kw.desc = "SMTP mail from buffer";
     kw.url = "/rules/smtp-keywords.html#smtp-mail-from";
     kw.Setup = DetectSmtpMailFromSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_smtp_mail_from_buffer_id = DetectHelperBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_smtp_mail_from_buffer_id = SCDetectHelperBufferMpmRegister(
             "smtp.mail_from", "SMTP MAIL FROM", ALPROTO_SMTP, STREAM_TOSERVER, GetSmtpMailFromData);
 
     kw.name = "smtp.rcpt_to";
@@ -154,7 +156,7 @@ void SCDetectSMTPRegister(void)
     kw.url = "/rules/smtp-keywords.html#smtp-rcpt-to";
     kw.Setup = DetectSmtpRcptToSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_smtp_rcpt_to_buffer_id = DetectHelperMultiBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_smtp_rcpt_to_buffer_id = SCDetectHelperMultiBufferMpmRegister(
             "smtp.rcpt_to", "SMTP RCPT TO", ALPROTO_SMTP, STREAM_TOSERVER, GetSmtpRcptToData);
 }

@@ -234,7 +234,7 @@ static int DetectTlsVersionSetup (DetectEngineCtx *de_ctx, Signature *s, const c
 {
     DetectTlsVersionData *tls = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     tls = DetectTlsVersionParse(de_ctx, str);
@@ -249,7 +249,7 @@ static int DetectTlsVersionSetup (DetectEngineCtx *de_ctx, Signature *s, const c
         list = s->init_data->hook.sm_list;
     }
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_TLS_VERSION, (SigMatchCtx *)tls, list) == NULL) {
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_TLS_VERSION, (SigMatchCtx *)tls, list) == NULL) {
         goto error;
     }
 

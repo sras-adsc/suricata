@@ -88,6 +88,7 @@ static int g_mpm_list_cnt[DETECT_BUFFER_MPM_TYPE_SIZE] = { 0, 0, 0 };
  */
 static void RegisterInternal(const char *name, int direction, int priority,
         PrefilterRegisterFunc PrefilterRegister, InspectionBufferGetDataPtr GetData,
+        InspectionSingleBufferGetDataPtr GetDataSingle,
         InspectionMultiBufferGetDataPtr GetMultiData, AppProto alproto, int tx_min_progress)
 {
     SCLogDebug("registering %s/%d/%d/%p/%p/%u/%d", name, direction, priority,
@@ -109,8 +110,8 @@ static void RegisterInternal(const char *name, int direction, int priority,
 
     // every HTTP2 can be accessed from DOH2
     if (alproto == ALPROTO_HTTP2 || alproto == ALPROTO_DNS) {
-        RegisterInternal(name, direction, priority, PrefilterRegister, GetData, GetMultiData,
-                ALPROTO_DOH2, tx_min_progress);
+        RegisterInternal(name, direction, priority, PrefilterRegister, GetData, GetDataSingle,
+                GetMultiData, ALPROTO_DOH2, tx_min_progress);
     }
     DetectBufferMpmRegistry *am = SCCalloc(1, sizeof(*am));
     BUG_ON(am == NULL);
@@ -126,6 +127,8 @@ static void RegisterInternal(const char *name, int direction, int priority,
     am->PrefilterRegisterWithListId = PrefilterRegister;
     if (GetData != NULL) {
         am->app_v2.GetData = GetData;
+    } else if (GetDataSingle != NULL) {
+        am->app_v2.GetDataSingle = GetDataSingle;
     } else if (GetMultiData != NULL) {
         am->app_v2.GetMultiData = GetMultiData;
     }
@@ -152,16 +155,24 @@ void DetectAppLayerMpmRegister(const char *name, int direction, int priority,
         PrefilterRegisterFunc PrefilterRegister, InspectionBufferGetDataPtr GetData,
         AppProto alproto, int tx_min_progress)
 {
-    RegisterInternal(
-            name, direction, priority, PrefilterRegister, GetData, NULL, alproto, tx_min_progress);
+    RegisterInternal(name, direction, priority, PrefilterRegister, GetData, NULL, NULL, alproto,
+            tx_min_progress);
+}
+
+void DetectAppLayerMpmRegisterSingle(const char *name, int direction, int priority,
+        PrefilterRegisterFunc PrefilterRegister, InspectionSingleBufferGetDataPtr GetData,
+        AppProto alproto, int tx_min_progress)
+{
+    RegisterInternal(name, direction, priority, PrefilterRegister, NULL, GetData, NULL, alproto,
+            tx_min_progress);
 }
 
 void DetectAppLayerMpmMultiRegister(const char *name, int direction, int priority,
         PrefilterRegisterFunc PrefilterRegister, InspectionMultiBufferGetDataPtr GetData,
         AppProto alproto, int tx_min_progress)
 {
-    RegisterInternal(
-            name, direction, priority, PrefilterRegister, NULL, GetData, alproto, tx_min_progress);
+    RegisterInternal(name, direction, priority, PrefilterRegister, NULL, NULL, GetData, alproto,
+            tx_min_progress);
 }
 
 /** \brief copy a mpm engine from parent_id, add in transforms */
@@ -976,27 +987,19 @@ static void PopulateMpmHelperAddPattern(MpmCtx *mpm_ctx, const DetectContentData
 
     if (cd->flags & DETECT_CONTENT_NOCASE) {
         if (chop) {
-            MpmAddPatternCI(mpm_ctx,
-                            cd->content + cd->fp_chop_offset, cd->fp_chop_len,
-                            pat_offset, pat_depth,
-                            cd->id, s->num, flags|MPM_PATTERN_CTX_OWNS_ID);
+            MpmAddPatternCI(mpm_ctx, cd->content + cd->fp_chop_offset, cd->fp_chop_len, pat_offset,
+                    pat_depth, cd->id, s->iid, flags | MPM_PATTERN_CTX_OWNS_ID);
         } else {
-            MpmAddPatternCI(mpm_ctx,
-                            cd->content, cd->content_len,
-                            pat_offset, pat_depth,
-                            cd->id, s->num, flags|MPM_PATTERN_CTX_OWNS_ID);
+            MpmAddPatternCI(mpm_ctx, cd->content, cd->content_len, pat_offset, pat_depth, cd->id,
+                    s->iid, flags | MPM_PATTERN_CTX_OWNS_ID);
         }
     } else {
         if (chop) {
-            MpmAddPatternCS(mpm_ctx,
-                            cd->content + cd->fp_chop_offset, cd->fp_chop_len,
-                            pat_offset, pat_depth,
-                            cd->id, s->num, flags|MPM_PATTERN_CTX_OWNS_ID);
+            MpmAddPatternCS(mpm_ctx, cd->content + cd->fp_chop_offset, cd->fp_chop_len, pat_offset,
+                    pat_depth, cd->id, s->iid, flags | MPM_PATTERN_CTX_OWNS_ID);
         } else {
-            MpmAddPatternCS(mpm_ctx,
-                            cd->content, cd->content_len,
-                            pat_offset, pat_depth,
-                            cd->id, s->num, flags|MPM_PATTERN_CTX_OWNS_ID);
+            MpmAddPatternCS(mpm_ctx, cd->content, cd->content_len, pat_offset, pat_depth, cd->id,
+                    s->iid, flags | MPM_PATTERN_CTX_OWNS_ID);
         }
     }
 }
@@ -1750,7 +1753,7 @@ MpmStore *MpmStorePrepareBuffer(DetectEngineCtx *de_ctx, SigGroupHead *sgh,
             case MPMB_TCP_PKT_TC:
                 if (SignatureHasPacketContent(s) == 1)
                 {
-                    sids_array[s->num / 8] |= 1 << (s->num % 8);
+                    sids_array[s->iid / 8] |= 1 << (s->iid % 8);
                     cnt++;
                 }
                 break;
@@ -1758,17 +1761,17 @@ MpmStore *MpmStorePrepareBuffer(DetectEngineCtx *de_ctx, SigGroupHead *sgh,
             case MPMB_TCP_STREAM_TC:
                 if (SignatureHasStreamContent(s) == 1)
                 {
-                    sids_array[s->num / 8] |= 1 << (s->num % 8);
+                    sids_array[s->iid / 8] |= 1 << (s->iid % 8);
                     cnt++;
                 }
                 break;
             case MPMB_UDP_TS:
             case MPMB_UDP_TC:
-                sids_array[s->num / 8] |= 1 << (s->num % 8);
+                sids_array[s->iid / 8] |= 1 << (s->iid % 8);
                 cnt++;
                 break;
             case MPMB_OTHERIP:
-                sids_array[s->num / 8] |= 1 << (s->num % 8);
+                sids_array[s->iid / 8] |= 1 << (s->iid % 8);
                 cnt++;
                 break;
             default:
@@ -2116,8 +2119,8 @@ static void PrepareMpms(DetectEngineCtx *de_ctx, SigGroupHead *sh)
                                 sa->sids_array_size = max_sid;
                                 BUG_ON(sa->sids_array == NULL); // TODO
                             }
-                            sa->sids_array[s->num / 8] |= 1 << (s->num % 8);
-                            SCLogDebug("instance %p: stored %u/%u ts", instance, s->id, s->num);
+                            sa->sids_array[s->iid / 8] |= 1 << (s->iid % 8);
+                            SCLogDebug("instance %p: stored %u/%u ts", instance, s->id, s->iid);
                         }
                     }
                     if (s->flags & SIG_FLAG_TOCLIENT) {
@@ -2128,8 +2131,8 @@ static void PrepareMpms(DetectEngineCtx *de_ctx, SigGroupHead *sh)
                                 sa->sids_array_size = max_sid;
                                 BUG_ON(sa->sids_array == NULL); // TODO
                             }
-                            sa->sids_array[s->num / 8] |= 1 << (s->num % 8);
-                            SCLogDebug("instance %p: stored %u/%u tc", instance, s->id, s->num);
+                            sa->sids_array[s->iid / 8] |= 1 << (s->iid % 8);
+                            SCLogDebug("instance %p: stored %u/%u tc", instance, s->id, s->iid);
                         }
                     }
                 }
@@ -2148,7 +2151,7 @@ static void PrepareMpms(DetectEngineCtx *de_ctx, SigGroupHead *sh)
                         sa->sids_array_size = max_sid;
                         BUG_ON(sa->sids_array == NULL); // TODO
                     }
-                    sa->sids_array[s->num / 8] |= 1 << (s->num % 8);
+                    sa->sids_array[s->iid / 8] |= 1 << (s->iid % 8);
                 }
                 break;
             }

@@ -86,7 +86,7 @@ static int DetectModbusSetup(DetectEngineCtx *de_ctx, Signature *s, const char *
     SCEnter();
     DetectModbusRust *modbus = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_MODBUS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_MODBUS) != 0)
         return -1;
 
     if ((modbus = SCModbusParse(str)) == NULL) {
@@ -95,7 +95,7 @@ static int DetectModbusSetup(DetectEngineCtx *de_ctx, Signature *s, const char *
     }
 
     /* Okay so far so good, lets get this into a SigMatch and put it in the Signature. */
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_MODBUS, (SigMatchCtx *)modbus, g_modbus_buffer_id) == NULL) {
         goto error;
     }

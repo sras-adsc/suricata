@@ -15,6 +15,7 @@ Suricata Rules
    http-keywords
    file-keywords
    dns-keywords
+   mdns-keywords
    tls-keywords
    ssh-keywords
    ja-keywords
@@ -53,5 +54,6 @@ Suricata Rules
    tag
    vlan-keywords
    ldap-keywords
+   pgsql-keywords
    rule-types
    email-keywords

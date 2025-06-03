@@ -19,7 +19,7 @@
 
 use std;
 use std::os::raw::{c_int, c_void};
-use suricata_sys::sys::{AppProto, AppProtoEnum};
+use suricata_sys::sys::{AppProto, AppProtoEnum, SCLogLevel};
 
 use crate::filecontainer::*;
 use crate::flow::Flow;
@@ -28,10 +28,6 @@ use crate::flow::Flow;
 pub enum DetectEngineState {}
 pub enum AppLayerDecoderEvents {}
 pub enum GenericVar {}
-#[repr(C)]
-pub struct DetectEngineThreadCtx {
-    _unused: [u8; 0],
-}
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -93,7 +89,7 @@ extern "C" {
 
 #[allow(non_snake_case)]
 pub type SCLogMessageFunc =
-    extern "C" fn(level: std::os::raw::c_int,
+    extern "C" fn(level: SCLogLevel,
                   filename: *const std::os::raw::c_char,
                   line: std::os::raw::c_uint,
                   function: *const std::os::raw::c_char,
@@ -103,7 +99,7 @@ pub type SCLogMessageFunc =
 pub type DetectEngineStateFreeFunc =
     extern "C" fn(state: *mut DetectEngineState);
 
-pub type AppLayerParserTriggerRawStreamReassemblyFunc =
+pub type AppLayerParserTriggerRawStreamInspectionFunc =
     extern "C" fn (flow: *const Flow, direction: i32);
 pub type AppLayerDecoderEventsSetEventRawFunc =
     extern "C" fn (events: *mut *mut AppLayerDecoderEvents,
@@ -170,7 +166,7 @@ pub struct SuricataContext {
     DetectEngineStateFree: DetectEngineStateFreeFunc,
     AppLayerDecoderEventsSetEventRaw: AppLayerDecoderEventsSetEventRawFunc,
     AppLayerDecoderEventsFreeEvents: AppLayerDecoderEventsFreeEventsFunc,
-    pub AppLayerParserTriggerRawStreamReassembly: AppLayerParserTriggerRawStreamReassemblyFunc,
+    pub AppLayerParserTriggerRawStreamInspection: AppLayerParserTriggerRawStreamInspectionFunc,
 
     pub HttpRangeFreeBlock: SCHttpRangeFreeBlock,
     pub HTPFileCloseHandleRange: SCHTPFileCloseHandleRange,
@@ -230,11 +226,11 @@ pub fn sc_generic_var_free(gvar: *mut GenericVar)
     }
 }
 
-/// AppLayerParserTriggerRawStreamReassembly wrapper
-pub fn sc_app_layer_parser_trigger_raw_stream_reassembly(flow: *const Flow, direction: i32) {
+/// AppLayerParserTriggerRawStreamInspection wrapper
+pub fn sc_app_layer_parser_trigger_raw_stream_inspection(flow: *const Flow, direction: i32) {
     unsafe {
         if let Some(c) = SC {
-            (c.AppLayerParserTriggerRawStreamReassembly)(flow, direction);
+            (c.AppLayerParserTriggerRawStreamInspection)(flow, direction);
         }
     }
 }

@@ -23,18 +23,18 @@ use crate::core::{STREAM_TOCLIENT, STREAM_TOSERVER};
 use crate::detect::uint::{
     detect_match_uint, detect_parse_uint_enum, DetectUintData, SCDetectU32Free, SCDetectU32Parse,
 };
-use crate::detect::{
-    helper_keyword_register_sticky_buffer, DetectHelperBufferMpmRegister,
-    DetectHelperBufferRegister, DetectHelperGetData, DetectHelperKeywordRegister,
-    DetectSignatureSetAppProto, SCSigTableAppLiteElmt, SigMatchAppendSMToList,
-    SigTableElmtStickyBuffer,
-};
+use crate::detect::{helper_keyword_register_sticky_buffer, SigTableElmtStickyBuffer};
 use std::ffi::CStr;
 use std::os::raw::{c_int, c_void};
 use std::ptr;
-use suricata_sys::sys::{DetectEngineCtx, SCDetectBufferSetActiveList, Signature};
+use suricata_sys::sys::{
+    DetectEngineCtx, DetectEngineThreadCtx, Flow, SCDetectBufferSetActiveList,
+    SCDetectHelperBufferMpmRegister, SCDetectHelperBufferRegister, SCDetectHelperKeywordRegister,
+    SCDetectSignatureSetAppProto, SCSigMatchAppendSMToList, SCSigTableAppLiteElmt, SigMatchCtx,
+    Signature,
+};
 
-unsafe extern "C" fn rfb_name_get_data(
+unsafe extern "C" fn rfb_name_get(
     tx: *const c_void, _flags: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, RFBTransaction);
@@ -52,31 +52,16 @@ unsafe extern "C" fn rfb_name_get_data(
     return false;
 }
 
-unsafe extern "C" fn rfb_name_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        rfb_name_get_data,
-    );
-}
-
 static mut G_RFB_NAME_BUFFER_ID: c_int = 0;
-static mut G_RFB_SEC_TYPE_KW_ID: c_int = 0;
+static mut G_RFB_SEC_TYPE_KW_ID: u16 = 0;
 static mut G_RFB_SEC_TYPE_BUFFER_ID: c_int = 0;
-static mut G_RFB_SEC_RESULT_KW_ID: c_int = 0;
+static mut G_RFB_SEC_RESULT_KW_ID: u16 = 0;
 static mut G_RFB_SEC_RESULT_BUFFER_ID: c_int = 0;
 
 unsafe extern "C" fn rfb_name_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_RFB) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_RFB) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_RFB_NAME_BUFFER_ID) < 0 {
@@ -88,14 +73,21 @@ unsafe extern "C" fn rfb_name_setup(
 unsafe extern "C" fn rfb_sec_type_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, raw: *const libc::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_RFB) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_RFB) != 0 {
         return -1;
     }
     let ctx = SCDetectU32Parse(raw) as *mut c_void;
     if ctx.is_null() {
         return -1;
     }
-    if SigMatchAppendSMToList(de, s, G_RFB_SEC_TYPE_KW_ID, ctx, G_RFB_SEC_TYPE_BUFFER_ID).is_null()
+    if SCSigMatchAppendSMToList(
+        de,
+        s,
+        G_RFB_SEC_TYPE_KW_ID,
+        ctx as *mut SigMatchCtx,
+        G_RFB_SEC_TYPE_BUFFER_ID,
+    )
+    .is_null()
     {
         rfb_sec_type_free(std::ptr::null_mut(), ctx);
         return -1;
@@ -113,15 +105,15 @@ fn rfb_sec_type_match_aux(tx: &RFBTransaction, ctx: &DetectUintData<u32>) -> c_i
 }
 
 unsafe extern "C" fn rfb_sec_type_match(
-    _de: *mut c_void, _f: *mut c_void, _flags: u8, _state: *mut c_void, tx: *mut c_void,
-    _sig: *const c_void, ctx: *const c_void,
+    _de: *mut DetectEngineThreadCtx, _f: *mut Flow, _flags: u8, _state: *mut c_void,
+    tx: *mut c_void, _sig: *const Signature, ctx: *const SigMatchCtx,
 ) -> c_int {
     let ctx = cast_pointer!(ctx, DetectUintData<u32>);
     let tx = cast_pointer!(tx, RFBTransaction);
     return rfb_sec_type_match_aux(tx, ctx);
 }
 
-unsafe extern "C" fn rfb_sec_type_free(_de: *mut c_void, ctx: *mut c_void) {
+unsafe extern "C" fn rfb_sec_type_free(_de: *mut DetectEngineCtx, ctx: *mut c_void) {
     let ctx = cast_pointer!(ctx, DetectUintData<u32>);
     SCDetectU32Free(ctx);
 }
@@ -142,18 +134,18 @@ unsafe extern "C" fn rfb_parse_sec_result(
 unsafe extern "C" fn rfb_sec_result_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, raw: *const libc::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_RFB) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_RFB) != 0 {
         return -1;
     }
     let ctx = rfb_parse_sec_result(raw) as *mut c_void;
     if ctx.is_null() {
         return -1;
     }
-    if SigMatchAppendSMToList(
+    if SCSigMatchAppendSMToList(
         de,
         s,
         G_RFB_SEC_RESULT_KW_ID,
-        ctx,
+        ctx as *mut SigMatchCtx,
         G_RFB_SEC_RESULT_BUFFER_ID,
     )
     .is_null()
@@ -174,15 +166,15 @@ fn rfb_sec_result_match_aux(tx: &RFBTransaction, ctx: &DetectUintData<u32>) -> c
 }
 
 unsafe extern "C" fn rfb_sec_result_match(
-    _de: *mut c_void, _f: *mut c_void, _flags: u8, _state: *mut c_void, tx: *mut c_void,
-    _sig: *const c_void, ctx: *const c_void,
+    _de: *mut DetectEngineThreadCtx, _f: *mut Flow, _flags: u8, _state: *mut c_void,
+    tx: *mut c_void, _sig: *const Signature, ctx: *const SigMatchCtx,
 ) -> c_int {
     let tx = cast_pointer!(tx, RFBTransaction);
     let ctx = cast_pointer!(ctx, DetectUintData<u32>);
     return rfb_sec_result_match_aux(tx, ctx);
 }
 
-unsafe extern "C" fn rfb_sec_result_free(_de: *mut c_void, ctx: *mut c_void) {
+unsafe extern "C" fn rfb_sec_result_free(_de: *mut DetectEngineCtx, ctx: *mut c_void) {
     // Just unbox...
     let ctx = cast_pointer!(ctx, DetectUintData<u32>);
     SCDetectU32Free(ctx);
@@ -197,24 +189,24 @@ pub unsafe extern "C" fn SCDetectRfbRegister() {
         setup: rfb_name_setup,
     };
     let _g_rfb_name_kw_id = helper_keyword_register_sticky_buffer(&kw);
-    G_RFB_NAME_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_RFB_NAME_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"rfb.name\0".as_ptr() as *const libc::c_char,
         b"rfb name\0".as_ptr() as *const libc::c_char,
         ALPROTO_RFB,
         STREAM_TOCLIENT,
-        rfb_name_get,
+        Some(rfb_name_get),
     );
     let kw = SCSigTableAppLiteElmt {
         name: b"rfb.sectype\0".as_ptr() as *const libc::c_char,
         desc: b"match RFB security type\0".as_ptr() as *const libc::c_char,
         url: b"/rules/rfb-keywords.html#rfb-sectype\0".as_ptr() as *const libc::c_char,
         AppLayerTxMatch: Some(rfb_sec_type_match),
-        Setup: rfb_sec_type_setup,
+        Setup: Some(rfb_sec_type_setup),
         Free: Some(rfb_sec_type_free),
         flags: 0,
     };
-    G_RFB_SEC_TYPE_KW_ID = DetectHelperKeywordRegister(&kw);
-    G_RFB_SEC_TYPE_BUFFER_ID = DetectHelperBufferRegister(
+    G_RFB_SEC_TYPE_KW_ID = SCDetectHelperKeywordRegister(&kw);
+    G_RFB_SEC_TYPE_BUFFER_ID = SCDetectHelperBufferRegister(
         b"rfb.sectype\0".as_ptr() as *const libc::c_char,
         ALPROTO_RFB,
         STREAM_TOSERVER,
@@ -224,12 +216,12 @@ pub unsafe extern "C" fn SCDetectRfbRegister() {
         desc: b"match RFB security result\0".as_ptr() as *const libc::c_char,
         url: b"/rules/rfb-keywords.html#rfb-secresult\0".as_ptr() as *const libc::c_char,
         AppLayerTxMatch: Some(rfb_sec_result_match),
-        Setup: rfb_sec_result_setup,
+        Setup: Some(rfb_sec_result_setup),
         Free: Some(rfb_sec_result_free),
         flags: 0,
     };
-    G_RFB_SEC_RESULT_KW_ID = DetectHelperKeywordRegister(&kw);
-    G_RFB_SEC_RESULT_BUFFER_ID = DetectHelperBufferRegister(
+    G_RFB_SEC_RESULT_KW_ID = SCDetectHelperKeywordRegister(&kw);
+    G_RFB_SEC_RESULT_BUFFER_ID = SCDetectHelperBufferRegister(
         b"rfb.secresult\0".as_ptr() as *const libc::c_char,
         ALPROTO_RFB,
         STREAM_TOCLIENT,

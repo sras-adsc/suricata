@@ -291,7 +291,7 @@ static int DetectSslVersionSetup (DetectEngineCtx *de_ctx, Signature *s, const c
 {
     DetectSslVersionData *ssl = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     ssl = DetectSslVersionParse(de_ctx, str);
@@ -301,7 +301,7 @@ static int DetectSslVersionSetup (DetectEngineCtx *de_ctx, Signature *s, const c
     /* Okay so far so good, lets get this into a SigMatch
      * and put it in the Signature. */
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_SSL_VERSION, (SigMatchCtx *)ssl, g_tls_generic_list_id) == NULL) {
         goto error;
     }

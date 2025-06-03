@@ -66,7 +66,7 @@ jobs:
           path: .
 
   almalinux-9:
-    name: AlmaLinux 9
+    name: AlmaLinux 9 (schema)
     runs-on: ubuntu-latest
     container: almalinux:9
     needs: [prepare-deps, prepare-cbindgen]
@@ -230,6 +230,9 @@ jobs:
           # And build.
           PATH=/usr/local/bin:$PATH make clean all
 
+      - name: Check EVE schema ordering
+        run: ./scripts/schema-sort.py --check ./etc/schema.json
+
   almalinux-9-templates:
     name: AlmaLinux 9 Test Templates
     runs-on: ubuntu-latest
@@ -283,7 +286,7 @@ jobs:
                 sudo \
                 which \
                 zlib-devel
-      - run: curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain stable -y
+      - run: curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain 1.85.0 -y
       - run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - run: rustup component add rustfmt
       - run: rustup component add clippy
@@ -309,6 +312,7 @@ jobs:
       - run: ./scripts/setup-app-layer.py --parser --logger --detect FooBar payload
       - run: make -j ${{ env.CPUS }}
       - run: ./src/suricata --list-app-layer-protos | grep foobar
+      - run: ./src/suricata --list-app-layer-hooks | grep "foobar:request_started"
       - name: Verify rustfmt
         run: rustfmt -v --check src/applayerfoobar/*.rs
         working-directory: rust
@@ -953,6 +957,9 @@ jobs:
       - run: sudo -u suricata -s python3 ./suricata-verify/run.py -q --debug-failed
         working-directory: /home/suricata/suricata
 
+      - run: src/suricata -h | grep '\-\-list\-app\-layer\-hooks' &> /dev/null
+        working-directory: /home/suricata/suricata
+
   # Test that ./configure fails out of libjansson is not available.
   almalinux-9-no-jansson:
     name: AlmaLinux 9 (no jansson)
@@ -1223,6 +1230,10 @@ jobs:
           RUSTFLAGS: "-C instrument-coverage"
           CFLAGS: "-fprofile-instr-generate -fcoverage-mapping -O0"
           CXXFLAGS: "-fprofile-instr-generate -fcoverage-mapping -O0"
+      - run: ./src/suricata -h
+        env:
+          LLVM_PROFILE_FILE: "/tmp/help.profraw"
+      - run: llvm-profdata-19 merge -o help.profdata /tmp/help.profraw
       - run: ./src/suricata -u -l /tmp/
         env:
           LLVM_PROFILE_FILE: "/tmp/ut.profraw"
@@ -1239,6 +1250,10 @@ jobs:
         env:
           LLVM_PROFILE_FILE: "/tmp/la.profraw"
       - run: llvm-profdata-19 merge -o la.profdata /tmp/la.profraw
+      - run: ./src/suricata --list-app-layer-hooks -l /tmp
+        env:
+          LLVM_PROFILE_FILE: "/tmp/lah.profraw"
+      - run: llvm-profdata-19 merge -o lah.profdata /tmp/lah.profraw
       - run: ./src/suricata --dump-features -c suricata.yaml -l /tmp
         env:
           LLVM_PROFILE_FILE: "/tmp/dumpfeatures.profraw"
@@ -1247,7 +1262,8 @@ jobs:
         env:
           LLVM_PROFILE_FILE: "/tmp/dumpconfig.profraw"
       - run: llvm-profdata-19 merge -o dumpconfig.profdata /tmp/dumpconfig.profraw
-      - run: llvm-cov-19 show ./src/suricata -instr-profile=ut.profdata --show-instantiations --ignore-filename-regex="^/root/.*" > coverage.txt
+      - run: llvm-profdata-19 merge -o combined.profdata $(find /tmp/ -name '*.profraw')
+      - run: llvm-cov-19 show ./src/suricata -instr-profile=combined.profdata --show-instantiations --ignore-filename-regex="^/root/.*" > coverage.txt
       - run: |
           cd rust
           cargo test --no-run
@@ -1789,6 +1805,7 @@ jobs:
           CC: "clang-15"
           CXX: "clang++-15"
           RUSTFLAGS: "-C instrument-coverage"
+          SURICATA_LUA_SYS_CFLAGS: "-fsanitize=address"
       - run: ./qa/run-ossfuzz-corpus.sh
       - run: llvm-profdata-15 merge -o default.profdata $(find /tmp/ -name '*.profraw')
       - run: llvm-cov-15 show ./src/suricata -instr-profile=default.profdata --show-instantiations --ignore-filename-regex="^/root/.*" > coverage.txt
@@ -2764,9 +2781,9 @@ jobs:
           . ./testenv/bin/activate
           pip install pyyaml
       - run: ./autogen.sh
-      - run: CPATH="$HOMEBREW_PREFIX/include:$CPATH" LIBRARY_PATH="$HOMEBREW_PREFIX/lib:$LIBRARY_PATH" PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH" CFLAGS="${DEFAULT_CFLAGS}" ./configure  --enable-warnings --enable-unittests --prefix="$HOME/.local/"
-      - run: CPATH="$HOMEBREW_PREFIX/include:$CPATH" LIBRARY_PATH="$HOMEBREW_PREFIX/lib:$LIBRARY_PATH" PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH" CFLAGS="${DEFAULT_CFLAGS}" make -j2
-      - run: CPATH="$HOMEBREW_PREFIX/include:$CPATH" LIBRARY_PATH="$HOMEBREW_PREFIX/lib:$LIBRARY_PATH" PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH" CFLAGS="${DEFAULT_CFLAGS}" make check
+      - run: CPATH="$HOMEBREW_PREFIX/include:$CPATH" LIBRARY_PATH="$HOMEBREW_PREFIX/lib:$LIBRARY_PATH" PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH" CFLAGS="${DEFAULT_CFLAGS}" ./configure --enable-warnings --enable-unittests --prefix="$HOME/.local/"
+      - run: CPATH="$HOMEBREW_PREFIX/include:$CPATH" LIBRARY_PATH="$HOMEBREW_PREFIX/lib:$LIBRARY_PATH" PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH" make -j2
+      - run: CPATH="$HOMEBREW_PREFIX/include:$CPATH" LIBRARY_PATH="$HOMEBREW_PREFIX/lib:$LIBRARY_PATH" PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH" make check
       - run: tar xf prep/suricata-verify.tar.gz
       - name: Running suricata-verify
         run: |
@@ -2793,6 +2810,11 @@ jobs:
         with:
           path: ~/.cargo/registry
           key: cargo-registry
+      - name: Cache npcap
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57
+        with:
+          path: /npcap-bin
+          key: npcap-bin-100
       - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -2811,10 +2833,12 @@ jobs:
       - run: tar xf prep/suricata-update.tar.gz
       - name: Npcap DLL
         run: |
-          curl -sL -O https://nmap.org/npcap/dist/npcap-1.00.exe
-          7z -y x -o/npcap-bin npcap-1.00.exe
-          # hack: place dlls in cwd
-          cp /npcap-bin/*.dll .
+          if ! test -e /npcap-bin; then
+              curl -sL -O https://nmap.org/npcap/dist/npcap-1.00.exe
+              7z -y x -o/npcap-bin npcap-1.00.exe
+          fi
+      - name: Place NPcap dll's in curent directory 
+        run: cp /npcap-bin/*.dll .
       - name: Npcap SDK
         run: |
           curl -sL -O https://nmap.org/npcap/dist/npcap-sdk-1.06.zip
@@ -2829,7 +2853,7 @@ jobs:
       - name: Run
         run: |
           ./src/suricata --build-info
-          ./src/suricata -u -l /tmp/
+          ./src/suricata -u -l .
           # need cwd in path due to npcap dlls (see above)
           PATH="$PATH:$(pwd)" python3 ./suricata-verify/run.py -q --debug-failed
       - run: make install
@@ -2877,7 +2901,7 @@ jobs:
       - name: Run
         run: |
           ./src/suricata --build-info
-          ./src/suricata -u -l /tmp/
+          ./src/suricata -u -l .
           python3 ./suricata-verify/run.py -q --debug-failed
       - run: make install
       - run: suricata-update -V

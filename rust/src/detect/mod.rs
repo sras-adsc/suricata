@@ -35,11 +35,13 @@ pub mod tojson;
 pub mod vlan;
 pub mod datasets;
 
-use std::os::raw::{c_char, c_int, c_void};
+use std::os::raw::c_int;
 use std::ffi::CString;
 
-use crate::core::DetectEngineThreadCtx;
-use suricata_sys::sys::{AppProto, DetectEngineCtx, Signature};
+use suricata_sys::sys::{
+    DetectEngineCtx, SCDetectHelperKeywordRegister, SCDetectHelperKeywordSetCleanCString,
+    SCSigTableAppLiteElmt, Signature,
+};
 
 /// EnumString trait that will be implemented on enums that
 /// derive StringEnum.
@@ -73,7 +75,7 @@ pub struct SigTableElmtStickyBuffer {
     ) -> c_int,
 }
 
-pub fn helper_keyword_register_sticky_buffer(kw: &SigTableElmtStickyBuffer) -> c_int {
+pub fn helper_keyword_register_sticky_buffer(kw: &SigTableElmtStickyBuffer) -> u16 {
     let name = CString::new(kw.name.as_bytes()).unwrap().into_raw();
     let desc = CString::new(kw.desc.as_bytes()).unwrap().into_raw();
     let url = CString::new(kw.url.as_bytes()).unwrap().into_raw();
@@ -81,14 +83,14 @@ pub fn helper_keyword_register_sticky_buffer(kw: &SigTableElmtStickyBuffer) -> c
         name,
         desc,
         url,
-        Setup: kw.setup,
+        Setup: Some(kw.setup),
         flags: SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER,
         AppLayerTxMatch: None,
         Free: None,
     };
     unsafe {
-        let r = DetectHelperKeywordRegister(&st);
-        DetectHelperKeywordSetCleanCString(r);
+        let r = SCDetectHelperKeywordRegister(&st);
+        SCDetectHelperKeywordSetCleanCString(r);
         return r;
     }
 }
@@ -112,97 +114,10 @@ pub unsafe extern "C" fn SCDetectSigMatchNamesFree(kw: &mut SCSigTableNamesElmt)
     let _ = CString::from_raw(kw.url);
 }
 
-#[repr(C)]
-#[allow(non_snake_case)]
-/// App-layer light version of SigTableElmt
-pub struct SCSigTableAppLiteElmt {
-    /// keyword name
-    pub name: *const libc::c_char,
-    /// keyword description
-    pub desc: *const libc::c_char,
-    /// keyword documentation url
-    pub url: *const libc::c_char,
-    /// flags SIGMATCH_*
-    pub flags: u16,
-    /// function callback to parse and setup keyword in rule
-    pub Setup: unsafe extern "C" fn(
-        de: *mut DetectEngineCtx,
-        s: *mut Signature,
-        raw: *const std::os::raw::c_char,
-    ) -> c_int,
-    /// function callback to free structure allocated by setup if any
-    pub Free: Option<unsafe extern "C" fn(de: *mut c_void, ptr: *mut c_void)>,
-    /// function callback to match on an app-layer transaction
-    pub AppLayerTxMatch: Option<
-        unsafe extern "C" fn(
-            de: *mut c_void,
-            f: *mut c_void,
-            flags: u8,
-            state: *mut c_void,
-            tx: *mut c_void,
-            sig: *const c_void,
-            ctx: *const c_void,
-        ) -> c_int,
-    >,
-}
-
 pub const SIGMATCH_NOOPT: u16 = 1; // BIT_U16(0) in detect.h
 pub(crate) const SIGMATCH_QUOTES_MANDATORY: u16 = 0x40; // BIT_U16(6) in detect.h
 pub const SIGMATCH_INFO_STICKY_BUFFER: u16 = 0x200; // BIT_U16(9)
 
-/// cbindgen:ignore
-extern "C" {
-    pub fn DetectHelperKeywordSetCleanCString(id: c_int);
-    pub fn DetectHelperGetData(
-        de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-        tx: *const c_void, list_id: c_int,
-        get_buf: unsafe extern "C" fn(*const c_void, u8, *mut *const u8, *mut u32) -> bool,
-    ) -> *mut c_void;
-    pub fn DetectHelperBufferMpmRegister(
-        name: *const libc::c_char, desc: *const libc::c_char, alproto: AppProto, dir: u8,
-        get_data: unsafe extern "C" fn(
-            *mut c_void,
-            *const c_void,
-            *const c_void,
-            u8,
-            *const c_void,
-            i32,
-        ) -> *mut c_void,
-    ) -> c_int;
-    pub fn DetectHelperKeywordRegister(kw: *const SCSigTableAppLiteElmt) -> c_int;
-    pub fn DetectHelperKeywordAliasRegister(kwid: c_int, alias: *const c_char);
-    pub fn DetectHelperBufferRegister(
-        name: *const libc::c_char, alproto: AppProto, dir: u8,
-    ) -> c_int;
-    pub fn DetectSignatureSetAppProto(s: *mut Signature, alproto: AppProto) -> c_int;
-    pub fn SigMatchAppendSMToList(
-        de: *mut DetectEngineCtx, s: *mut Signature, kwid: c_int, ctx: *const c_void, bufid: c_int,
-    ) -> *mut c_void;
-    // in detect-engine-helper.h
-    pub fn DetectHelperMultiBufferMpmRegister(
-        name: *const libc::c_char, desc: *const libc::c_char, alproto: AppProto, dir: u8,
-        get_multi_data: unsafe extern "C" fn(
-            *mut DetectEngineThreadCtx,
-            *const c_void,
-            u8,
-            u32,
-            *mut *const u8,
-            *mut u32,
-        ) -> bool,
-    ) -> c_int;
-    pub fn DetectHelperMultiBufferProgressMpmRegister(
-        name: *const libc::c_char, desc: *const libc::c_char, alproto: AppProto, dir: u8,
-        get_multi_data: unsafe extern "C" fn(
-            *mut DetectEngineThreadCtx,
-            *const c_void,
-            u8,
-            u32,
-            *mut *const u8,
-            *mut u32,
-        ) -> bool,
-        progress: c_int,
-    ) -> c_int;
-}
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 // endian <big|little|dce>

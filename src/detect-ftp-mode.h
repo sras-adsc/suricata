@@ -1,4 +1,4 @@
-/* Copyright (C) 2024 Open Information Security Foundation
+/* Copyright (C) 2025 Open Information Security Foundation
  *
  * You can copy, redistribute or modify this Program under the terms of
  * the GNU General Public License version 2 as published by the Free
@@ -18,12 +18,12 @@
 /**
  * \file
  *
- * \author Sascha Steinbiss <sascha@steinbiss.name>
+ * \author Jeff Lucovsky  <jlucovsky@oisf.net>
  */
 
-#ifndef SURICATA_UTIL_JA4_H
-#define SURICATA_UTIL_JA4_H
+#ifndef SURICATA_DETECT_FTP_MODE_H
+#define SURICATA_DETECT_FTP_MODE_H
 
-#define JA4_HEX_LEN 36
+void DetectFtpModeRegister(void);
 
-#endif /* SURICATA_UTIL_JA4_H */
+#endif /* SURICATA_DETECT_FTP_MODE_H */

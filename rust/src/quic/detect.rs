@@ -15,10 +15,11 @@
  * 02110-1301, USA.
  */
 
-use crate::core::{DetectEngineThreadCtx, STREAM_TOCLIENT, STREAM_TOSERVER};
+use crate::core::{STREAM_TOCLIENT, STREAM_TOSERVER};
 use crate::quic::quic::QuicTransaction;
 use std::os::raw::c_void;
 use std::ptr;
+use suricata_sys::sys::DetectEngineThreadCtx;
 
 #[no_mangle]
 pub unsafe extern "C" fn SCQuicTxGetUa(
@@ -74,8 +75,8 @@ pub unsafe extern "C" fn SCQuicTxGetJa4(
     tx: &QuicTransaction, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> u8 {
     if let Some(ja4) = &tx.ja4 {
-        *buffer = ja4.as_ptr();
-        *buffer_len = ja4.len() as u32;
+        *buffer = ja4.as_ref().as_ptr();
+        *buffer_len = ja4.as_ref().len() as u32;
         1
     } else {
         *buffer = ptr::null();

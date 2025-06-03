@@ -54,7 +54,7 @@ static int DetectFtpReplySetup(DetectEngineCtx *de_ctx, Signature *s, const char
     if (SCDetectBufferSetActiveList(de_ctx, s, g_ftp_reply_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
         return -1;
 
     return 0;
@@ -75,7 +75,7 @@ static bool DetectFTPReplyGetData(DetectEngineThreadCtx *_det_ctx, const void *t
             DEBUG_VALIDATE_BUG_ON(wrapper->response == NULL);
             if (index == count) {
                 *buffer = (const uint8_t *)wrapper->response->response;
-                *buffer_len = wrapper->response->length;
+                *buffer_len = (uint32_t)wrapper->response->length;
                 return true;
             }
             count++;

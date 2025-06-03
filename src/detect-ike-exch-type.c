@@ -106,7 +106,7 @@ static int DetectIkeExchTypeMatch(DetectEngineThreadCtx *det_ctx, Flow *f, uint8
  */
 static int DetectIkeExchTypeSetup(DetectEngineCtx *de_ctx, Signature *s, const char *rawstr)
 {
-    if (DetectSignatureSetAppProto(s, ALPROTO_IKE) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_IKE) != 0)
         return -1;
 
     DetectU8Data *ike_exch_type = DetectU8Parse(rawstr);
@@ -116,7 +116,7 @@ static int DetectIkeExchTypeSetup(DetectEngineCtx *de_ctx, Signature *s, const c
     /* okay so far so good, lets get this into a SigMatch
      * and put it in the Signature. */
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_IKE_EXCH_TYPE, (SigMatchCtx *)ike_exch_type,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_IKE_EXCH_TYPE, (SigMatchCtx *)ike_exch_type,
                 g_ike_exch_type_buffer_id) == NULL) {
         goto error;
     }

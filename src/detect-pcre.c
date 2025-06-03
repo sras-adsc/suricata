@@ -904,7 +904,7 @@ static int DetectPcreSetup (DetectEngineCtx *de_ctx, Signature *s, const char *r
                     if (s->alproto != ALPROTO_UNKNOWN && !AppProtoEquals(s->alproto, alproto)) {
                         goto error;
                     }
-                    if (DetectSignatureSetAppProto(s, alproto) < 0)
+                    if (SCDetectSignatureSetAppProto(s, alproto) < 0)
                         goto error;
                 }
                 sm_list = parsed_sm_list;
@@ -915,7 +915,7 @@ static int DetectPcreSetup (DetectEngineCtx *de_ctx, Signature *s, const char *r
     if (sm_list == -1)
         goto error;
 
-    SigMatch *sm = SigMatchAppendSMToList(de_ctx, s, DETECT_PCRE, (SigMatchCtx *)pd, sm_list);
+    SigMatch *sm = SCSigMatchAppendSMToList(de_ctx, s, DETECT_PCRE, (SigMatchCtx *)pd, sm_list);
     if (sm == NULL) {
         goto error;
     }
@@ -1178,7 +1178,7 @@ static int DetectPcreParseTest10(void)
     DetectEngineCtx *de_ctx = DetectEngineCtxInit();
     FAIL_IF_NULL(de_ctx);
 
-    FAIL_IF(DetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0);
+    FAIL_IF(SCDetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0);
 
     FAIL_IF_NOT(DetectPcreSetup(de_ctx, s, "/bamboo/") == 0);
     FAIL_IF_NOT(DetectBufferGetFirstSigMatch(s, g_dce_stub_data_buffer_id) == NULL);

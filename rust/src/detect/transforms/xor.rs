@@ -15,11 +15,12 @@
  * 02110-1301, USA.
  */
 
-use super::{
-    DetectHelperTransformRegister, DetectSignatureAddTransform, InspectionBufferCheckAndExpand,
-    InspectionBufferLength, InspectionBufferPtr, InspectionBufferTruncate, SCTransformTableElmt,
-};
 use crate::detect::SIGMATCH_QUOTES_MANDATORY;
+use suricata_sys::sys::{
+    DetectEngineCtx, DetectEngineThreadCtx, InspectionBuffer, SCDetectHelperTransformRegister,
+    SCDetectSignatureAddTransform, SCInspectionBufferCheckAndExpand, SCInspectionBufferTruncate,
+    SCTransformTableElmt, Signature,
+};
 
 use std::ffi::CStr;
 use std::os::raw::{c_int, c_void};
@@ -59,13 +60,13 @@ unsafe fn xor_parse(raw: *const std::os::raw::c_char) -> *mut c_void {
 }
 
 unsafe extern "C" fn xor_setup(
-    de: *mut c_void, s: *mut c_void, opt_str: *const std::os::raw::c_char,
+    de: *mut DetectEngineCtx, s: *mut Signature, opt_str: *const std::os::raw::c_char,
 ) -> c_int {
     let ctx = xor_parse(opt_str);
     if ctx.is_null() {
         return -1;
     }
-    let r = DetectSignatureAddTransform(s, G_TRANSFORM_XOR_ID, ctx);
+    let r = SCDetectSignatureAddTransform(s, G_TRANSFORM_XOR_ID, ctx);
     if r != 0 {
         xor_free(de, ctx);
     }
@@ -80,15 +81,17 @@ fn xor_transform_do(input: &[u8], output: &mut [u8], ctx: &DetectTransformXorDat
     }
 }
 
-unsafe extern "C" fn xor_transform(_det: *mut c_void, buffer: *mut c_void, ctx: *mut c_void) {
-    let input = InspectionBufferPtr(buffer);
-    let input_len = InspectionBufferLength(buffer);
+unsafe extern "C" fn xor_transform(
+    _det: *mut DetectEngineThreadCtx, buffer: *mut InspectionBuffer, ctx: *mut c_void,
+) {
+    let input = (*buffer).inspect;
+    let input_len = (*buffer).inspect_len;
     if input.is_null() || input_len == 0 {
         return;
     }
     let input = build_slice!(input, input_len as usize);
 
-    let output = InspectionBufferCheckAndExpand(buffer, input_len);
+    let output = SCInspectionBufferCheckAndExpand(buffer, input_len);
     if output.is_null() {
         // allocation failure
         return;
@@ -98,11 +101,21 @@ unsafe extern "C" fn xor_transform(_det: *mut c_void, buffer: *mut c_void, ctx: 
     let ctx = cast_pointer!(ctx, DetectTransformXorData);
     xor_transform_do(input, output, ctx);
 
-    InspectionBufferTruncate(buffer, input_len);
+    SCInspectionBufferTruncate(buffer, input_len);
 }
 
-unsafe extern "C" fn xor_free(_de: *mut c_void, ctx: *mut c_void) {
+unsafe extern "C" fn xor_free(_de: *mut DetectEngineCtx, ctx: *mut c_void) {
     std::mem::drop(Box::from_raw(ctx as *mut DetectTransformXorData));
+}
+
+unsafe extern "C" fn xor_id(data: *mut *const u8, length: *mut u32, ctx: *mut c_void) {
+    if data.is_null() || length.is_null() || ctx.is_null() {
+        return;
+    }
+
+    let ctx = cast_pointer!(ctx, DetectTransformXorData);
+    *data = ctx.key.as_ptr();
+    *length = ctx.key.len() as u32;
 }
 
 #[no_mangle]
@@ -111,16 +124,17 @@ pub unsafe extern "C" fn DetectTransformXorRegister() {
         name: b"xor\0".as_ptr() as *const libc::c_char,
         desc: b"modify buffer via XOR decoding before inspection\0".as_ptr() as *const libc::c_char,
         url: b"/rules/transforms.html#xor\0".as_ptr() as *const libc::c_char,
-        Setup: xor_setup,
+        Setup: Some(xor_setup),
         flags: SIGMATCH_QUOTES_MANDATORY,
-        Transform: xor_transform,
+        Transform: Some(xor_transform),
         Free: Some(xor_free),
         TransformValidate: None,
+        TransformId: Some(xor_id),
     };
     unsafe {
-        G_TRANSFORM_XOR_ID = DetectHelperTransformRegister(&kw);
+        G_TRANSFORM_XOR_ID = SCDetectHelperTransformRegister(&kw);
         if G_TRANSFORM_XOR_ID < 0 {
-            SCLogWarning!("Failed registering transform dot_prefix");
+            SCLogWarning!("Failed registering transform xor");
         }
     }
 }
@@ -137,6 +151,32 @@ mod tests {
             xor_parse_do("0a0DC8ff"),
             Some(DetectTransformXorData { key: key.to_vec() })
         );
+    }
+
+    #[test]
+    fn test_xor_id() {
+        let ctx = Box::new(DetectTransformXorData {
+            key: vec![1, 2, 3, 4, 5],
+        });
+
+        let ctx_ptr: *const c_void = &*ctx as *const _ as *const c_void;
+
+        let mut data_ptr: *const u8 = std::ptr::null();
+        let mut length: u32 = 0;
+
+        unsafe {
+            xor_id(
+                &mut data_ptr as *mut *const u8,
+                &mut length as *mut u32,
+                ctx_ptr as *mut c_void,
+            );
+
+            assert!(!data_ptr.is_null(), "data_ptr should not be null");
+            assert_eq!(length, 5);
+
+            let actual = std::slice::from_raw_parts(data_ptr, length as usize);
+            assert_eq!(actual, &[1, 2, 3, 4, 5]);
+        }
     }
 
     #[test]

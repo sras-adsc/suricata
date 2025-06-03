@@ -111,7 +111,7 @@ static int DetectIkeKeyExchangePayloadLengthMatch(DetectEngineThreadCtx *det_ctx
 static int DetectIkeKeyExchangePayloadLengthSetup(
         DetectEngineCtx *de_ctx, Signature *s, const char *rawstr)
 {
-    if (DetectSignatureSetAppProto(s, ALPROTO_IKE) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_IKE) != 0)
         return -1;
 
     DetectU32Data *key_exchange_payload_length = DetectU32Parse(rawstr);
@@ -121,7 +121,7 @@ static int DetectIkeKeyExchangePayloadLengthSetup(
     /* okay so far so good, lets get this into a SigMatch
      * and put it in the Signature. */
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_IKE_KEY_EXCHANGE_PAYLOAD_LENGTH,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_IKE_KEY_EXCHANGE_PAYLOAD_LENGTH,
                 (SigMatchCtx *)key_exchange_payload_length,
                 g_ike_key_exch_payload_length_buffer_id) == NULL) {
         goto error;

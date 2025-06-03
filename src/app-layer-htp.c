@@ -536,11 +536,7 @@ static void HTPStateTransactionFree(void *state, uint64_t id)
     HtpState *s = (HtpState *)state;
 
     SCLogDebug("state %p, id %"PRIu64, s, id);
-
-    htp_tx_t *tx = HTPStateGetTx(s, id);
-    if (tx != NULL) {
-        htp_tx_destroy(s->connp, tx);
-    }
+    htp_tx_destroy(s->connp, id);
 }
 
 /**
@@ -1475,7 +1471,7 @@ end:
 
                 /* body still in progress, but due to min inspect size we need to inspect now */
                 StreamTcpReassemblySetMinInspectDepth(hstate->f->protoctx, STREAM_TOSERVER, depth);
-                AppLayerParserTriggerRawStreamReassembly(hstate->f, STREAM_TOSERVER);
+                AppLayerParserTriggerRawStreamInspection(hstate->f, STREAM_TOSERVER);
             }
         /* after the start of the body, disable the depth logic */
         } else if (tx_ud->request_body.body_inspected > 0) {
@@ -1567,7 +1563,7 @@ static int HTPCallbackResponseBodyData(const htp_connp_t *connp, htp_tx_data_t *
 
                 /* body still in progress, but due to min inspect size we need to inspect now */
                 StreamTcpReassemblySetMinInspectDepth(hstate->f->protoctx, STREAM_TOCLIENT, depth);
-                AppLayerParserTriggerRawStreamReassembly(hstate->f, STREAM_TOCLIENT);
+                AppLayerParserTriggerRawStreamInspection(hstate->f, STREAM_TOCLIENT);
             }
         /* after the start of the body, disable the depth logic */
         } else if (tx_ud->response_body.body_inspected > 0) {
@@ -1773,7 +1769,7 @@ static int HTPCallbackRequestComplete(const htp_connp_t *connp, htp_tx_t *tx)
     hstate->last_request_data_stamp = abs_right_edge;
     /* request done, do raw reassembly now to inspect state and stream
      * at the same time. */
-    AppLayerParserTriggerRawStreamReassembly(hstate->f, STREAM_TOSERVER);
+    AppLayerParserTriggerRawStreamInspection(hstate->f, STREAM_TOSERVER);
     SCReturnInt(HTP_STATUS_OK);
 }
 
@@ -1822,7 +1818,7 @@ static int HTPCallbackResponseComplete(const htp_connp_t *connp, htp_tx_t *tx)
 
     /* response done, do raw reassembly now to inspect state and stream
      * at the same time. */
-    AppLayerParserTriggerRawStreamReassembly(hstate->f, STREAM_TOCLIENT);
+    AppLayerParserTriggerRawStreamInspection(hstate->f, STREAM_TOCLIENT);
 
     /* handle HTTP CONNECT */
     if (htp_tx_request_method_number(tx) == HTP_METHOD_CONNECT) {
@@ -2486,6 +2482,34 @@ static void *HTPStateGetTx(void *alstate, uint64_t tx_id)
         return NULL;
 }
 
+static AppLayerGetTxIterTuple HTPGetTxIterator(const uint8_t ipproto, const AppProto alproto,
+        void *alstate, uint64_t min_tx_id, uint64_t max_tx_id, AppLayerGetTxIterState *state)
+{
+    HtpState *http_state = (HtpState *)alstate;
+    uint64_t size = HTPStateGetTxCnt(alstate);
+    AppLayerGetTxIterTuple no_tuple = { NULL, 0, false };
+    if (http_state) {
+        while (state->un.u64 < size) {
+            htp_tx_t *tx = htp_connp_tx_index(http_state->connp, state->un.u64);
+            if (!tx) {
+                return no_tuple;
+            }
+            uint64_t tx_id = htp_tx_index(tx);
+            if (tx_id < min_tx_id) {
+                state->un.u64++;
+                continue;
+            }
+            AppLayerGetTxIterTuple tuple = {
+                .tx_ptr = tx,
+                .tx_id = tx_id,
+                .has_next = state->un.u64 < size,
+            };
+            return tuple;
+        }
+    }
+    return no_tuple;
+}
+
 void *HtpGetTxForH2(void *alstate)
 {
     // gets last transaction
@@ -2616,7 +2640,7 @@ void RegisterHTPParsers(void)
                 IPPROTO_TCP, ALPROTO_HTTP1, HTPStateGetAlstateProgress);
         AppLayerParserRegisterGetTxCnt(IPPROTO_TCP, ALPROTO_HTTP1, HTPStateGetTxCnt);
         AppLayerParserRegisterGetTx(IPPROTO_TCP, ALPROTO_HTTP1, HTPStateGetTx);
-
+        AppLayerParserRegisterGetTxIterator(IPPROTO_TCP, ALPROTO_HTTP1, HTPGetTxIterator);
         AppLayerParserRegisterStateProgressCompletionStatus(
                 ALPROTO_HTTP1, HTP_REQUEST_PROGRESS_COMPLETE, HTP_RESPONSE_PROGRESS_COMPLETE);
         AppLayerParserRegisterGetEventInfo(IPPROTO_TCP, ALPROTO_HTTP1, HTPStateGetEventInfo);
@@ -2722,9 +2746,9 @@ static int HTPParserTest01(void)
     FAIL_IF(htp_tx_request_method_number(tx) != HTP_METHOD_POST);
     FAIL_IF(htp_tx_request_protocol_number(tx) != HTP_PROTOCOL_V1_0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -2766,9 +2790,9 @@ static int HTPParserTest01b(void)
     FAIL_IF(htp_tx_request_method_number(tx) != HTP_METHOD_POST);
     FAIL_IF(htp_tx_request_protocol_number(tx) != HTP_PROTOCOL_V1_0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -2821,9 +2845,9 @@ static int HTPParserTest01c(void)
     FAIL_IF(htp_tx_request_method_number(tx) != HTP_METHOD_POST);
     FAIL_IF(htp_tx_request_protocol_number(tx) != HTP_PROTOCOL_V1_0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -2877,9 +2901,9 @@ static int HTPParserTest01a(void)
     FAIL_IF(htp_tx_request_method_number(tx) != HTP_METHOD_POST);
     FAIL_IF(htp_tx_request_protocol_number(tx) != HTP_PROTOCOL_V1_0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -2922,9 +2946,9 @@ static int HTPParserTest02(void)
     FAIL_IF(strcmp(method, "POST") != 0);
     SCFree(method);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -2971,9 +2995,9 @@ static int HTPParserTest03(void)
     FAIL_IF(htp_tx_request_method_number(tx) != HTP_METHOD_UNKNOWN);
     FAIL_IF(htp_tx_request_protocol_number(tx) != HTP_PROTOCOL_V1_0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3012,9 +3036,9 @@ static int HTPParserTest04(void)
     FAIL_IF(htp_tx_request_method_number(tx) != HTP_METHOD_UNKNOWN);
     FAIL_IF(htp_tx_request_protocol_number(tx) != HTP_PROTOCOL_V0_9);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3085,9 +3109,9 @@ static int HTPParserTest05(void)
 
     FAIL_IF_NOT(htp_tx_response_status_number(tx) == 200);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3174,9 +3198,9 @@ static int HTPParserTest06(void)
     const htp_header_t *h = htp_tx_request_header_index(tx, 0);
     FAIL_IF_NULL(h);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3230,9 +3254,9 @@ static int HTPParserTest07(void)
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3289,13 +3313,13 @@ libhtp:\n\
     FAIL_IF_NULL(request_uri_normalized);
     PrintRawDataFp(stdout, bstr_ptr(request_uri_normalized), bstr_len(request_uri_normalized));
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3351,13 +3375,13 @@ libhtp:\n\
     FAIL_IF_NULL(request_uri_normalized);
     PrintRawDataFp(stdout, bstr_ptr(request_uri_normalized), bstr_len(request_uri_normalized));
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3413,9 +3437,9 @@ static int HTPParserTest10(void)
     FAIL_IF_NULL(value);
     FAIL_IF(strcmp(value, "www.google.com") != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     SCFree(name);
     SCFree(value);
     PASS;
@@ -3471,9 +3495,9 @@ static int HTPParserTest11(void)
     FAIL_IF(bstr_ptr(request_uri_normalized)[2] != '0');
     FAIL_IF(bstr_ptr(request_uri_normalized)[3] != '0');
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3530,9 +3554,9 @@ static int HTPParserTest12(void)
     FAIL_IF(bstr_ptr(request_uri_normalized)[5] != '0');
     FAIL_IF(bstr_ptr(request_uri_normalized)[6] != '0');
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3586,9 +3610,9 @@ static int HTPParserTest13(void)
     FAIL_IF_NULL(value);
     FAIL_IF(strcmp(value, "www.google.com\rName: Value") != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     SCFree(name);
     SCFree(value);
 
@@ -3862,14 +3886,13 @@ libhtp:\n\
     tx = HTPStateGetTx(htp_state, 1);
     FAIL_IF_NULL(tx);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -3966,14 +3989,13 @@ libhtp:\n\
     FAIL_IF(reflen != bstr_len(request_uri_normalized));
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref3, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4057,14 +4079,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref3, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4159,14 +4180,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref3, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4250,14 +4270,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref2, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4326,14 +4345,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref1, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4402,14 +4420,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref1, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4478,14 +4495,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref1, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4555,14 +4571,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref1, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4629,14 +4644,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref1, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4704,14 +4718,13 @@ libhtp:\n\
 
     FAIL_IF(memcmp(bstr_ptr(request_uri_normalized), ref1, bstr_len(request_uri_normalized)) != 0);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
-
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4820,13 +4833,13 @@ libhtp:\n\
     AppLayerDecoderEvents *decoder_events = AppLayerParserGetDecoderEvents(f->alparser);
     FAIL_IF_NOT_NULL(decoder_events);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     HTPFreeConfig();
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -4914,9 +4927,9 @@ libhtp:\n\
 
     FAIL_IF(decoder_events->events[0] != HTP_LOG_CODE_REQUEST_FIELD_TOO_LONG);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     SCFree(httpbuf);
     HTPFreeConfig();
     SCConfDeInit();
@@ -5013,9 +5026,9 @@ libhtp:\n\
             AppLayerParserGetEventsByTx(IPPROTO_TCP, ALPROTO_HTTP1, txtmp);
     FAIL_IF_NOT_NULL(decoder_events);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     SCFree(httpbuf);
     HTPFreeConfig();
     SCConfDeInit();
@@ -5076,9 +5089,9 @@ static int HTPParserTest16(void)
     FAIL_IF(decoder_events->events[1] != HTP_LOG_CODE_URI_DELIM_NON_COMPLIANT);
 #endif
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -5135,9 +5148,9 @@ static int HTPParserTest20(void)
     FAIL_IF(htp_tx_response_status_number(tx) != 0);
     FAIL_IF(htp_tx_response_protocol_number(tx) != -1);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -5194,9 +5207,9 @@ static int HTPParserTest21(void)
     FAIL_IF(htp_tx_response_status_number(tx) != 0);
     FAIL_IF(htp_tx_response_protocol_number(tx) != -1);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -5248,9 +5261,9 @@ static int HTPParserTest22(void)
     FAIL_IF(htp_tx_response_status_number(tx) != -0);
     FAIL_IF(htp_tx_response_protocol_number(tx) != -1);
 
+    UTHFreeFlow(f);
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -5302,9 +5315,10 @@ static int HTPParserTest23(void)
     FAIL_IF(htp_tx_response_status_number(tx) != -1);
     FAIL_IF(htp_tx_response_protocol_number(tx) != -2);
 
+    UTHFreeFlow(f);
+
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -5356,9 +5370,10 @@ static int HTPParserTest24(void)
     FAIL_IF(htp_tx_response_status_number(tx) != -1);
     FAIL_IF(htp_tx_response_protocol_number(tx) != HTP_PROTOCOL_V1_0);
 
+    UTHFreeFlow(f);
+
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
     PASS;
 }
 
@@ -5465,9 +5480,10 @@ static int HTPParserTest25(void)
     HtpState *http_state = f->alstate;
     FAIL_IF_NULL(http_state);
 
+    UTHFreeFlow(f);
+
     AppLayerParserThreadCtxFree(alp_tctx);
     StreamTcpFreeConfig(true);
-    UTHFreeFlow(f);
 
     PASS;
 }
@@ -5593,15 +5609,16 @@ libhtp:\n\
     File *ptr = ffc->head;
     FAIL_IF(ptr->state != FILE_STATE_CLOSED);
 
+    FLOW_DESTROY(&f);
+    UTHFreePackets(&p1, 1);
+    UTHFreePackets(&p2, 1);
+
     AppLayerParserThreadCtxFree(alp_tctx);
     DetectEngineThreadCtxDeinit(&th_v, (void *)det_ctx);
     DetectEngineCtxFree(de_ctx);
     StreamTcpFreeConfig(true);
 
     HTPFreeConfig();
-    FLOW_DESTROY(&f);
-    UTHFreePackets(&p1, 1);
-    UTHFreePackets(&p2, 1);
     SCConfDeInit();
     SCConfRestoreContextBackup();
     HtpConfigRestoreBackup();

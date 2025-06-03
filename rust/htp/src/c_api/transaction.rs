@@ -8,9 +8,9 @@ use std::convert::{TryFrom, TryInto};
 /// # Safety
 /// When calling this method, you have to ensure that tx is either properly initialized or NULL
 #[no_mangle]
-pub unsafe extern "C" fn htp_tx_destroy(connp: *mut ConnectionParser, tx: *const Transaction) {
-    if let (Some(connp), Some(tx)) = (connp.as_mut(), tx.as_ref()) {
-        connp.remove_tx(tx.index)
+pub unsafe extern "C" fn htp_tx_destroy(connp: *mut ConnectionParser, index: usize) {
+    if let Some(connp) = connp.as_mut() {
+        connp.remove_tx(index)
     }
 }
 
@@ -435,6 +435,17 @@ pub unsafe extern "C" fn htp_tx_response_message_len(tx: *const Transaction) -> 
 #[no_mangle]
 pub unsafe extern "C" fn htp_tx_flags(tx: *const Transaction) -> u64 {
     tx.as_ref().map(|tx| tx.flags).unwrap_or(0)
+}
+
+/// Get the transaction's index.
+///
+/// tx: Transaction pointer.
+///
+/// # Safety
+/// When calling this method, you have to ensure that tx is either properly initialized or NULL
+#[no_mangle]
+pub unsafe extern "C" fn htp_tx_index(tx: *const Transaction) -> usize {
+    tx.as_ref().map(|tx| tx.index).unwrap_or(0)
 }
 
 /// Get the transaction's request progress.

@@ -103,7 +103,7 @@ static int DetectUrilenSetup (DetectEngineCtx *de_ctx, Signature *s, const char 
     SCEnter();
     DetectUrilenData *urilend = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_HTTP) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_HTTP) != 0)
         return -1;
 
     urilend = DetectUrilenParse(urilenstr);
@@ -111,12 +111,12 @@ static int DetectUrilenSetup (DetectEngineCtx *de_ctx, Signature *s, const char 
         goto error;
 
     if (urilend->raw_buffer) {
-        if (SigMatchAppendSMToList(de_ctx, s, DETECT_URILEN, (SigMatchCtx *)urilend,
+        if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_URILEN, (SigMatchCtx *)urilend,
                     g_http_raw_uri_buffer_id) == NULL) {
             goto error;
         }
     } else {
-        if (SigMatchAppendSMToList(de_ctx, s, DETECT_URILEN, (SigMatchCtx *)urilend,
+        if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_URILEN, (SigMatchCtx *)urilend,
                     g_http_uri_buffer_id) == NULL) {
             goto error;
         }

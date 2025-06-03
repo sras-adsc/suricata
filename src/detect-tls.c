@@ -301,7 +301,7 @@ static int DetectTlsSubjectSetup (DetectEngineCtx *de_ctx, Signature *s, const c
 {
     DetectTlsData *tls = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     tls = DetectTlsSubjectParse(de_ctx, str, s->init_data->negated);
@@ -311,7 +311,7 @@ static int DetectTlsSubjectSetup (DetectEngineCtx *de_ctx, Signature *s, const c
     /* Okay so far so good, lets get this into a SigMatch
      * and put it in the Signature. */
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_TLS_SUBJECT, (SigMatchCtx *)tls, g_tls_cert_list_id) == NULL) {
         goto error;
     }
@@ -491,7 +491,7 @@ static int DetectTlsIssuerDNSetup (DetectEngineCtx *de_ctx, Signature *s, const 
 {
     DetectTlsData *tls = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     tls = DetectTlsIssuerDNParse(de_ctx, str, s->init_data->negated);
@@ -501,7 +501,7 @@ static int DetectTlsIssuerDNSetup (DetectEngineCtx *de_ctx, Signature *s, const 
     /* Okay so far so good, lets get this into a SigMatch
      * and put it in the Signature. */
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_TLS_ISSUERDN, (SigMatchCtx *)tls, g_tls_cert_list_id) == NULL) {
         goto error;
     }
@@ -585,12 +585,12 @@ static void DetectTlsFingerprintFree(DetectEngineCtx *de_ctx, void *ptr)
 static int DetectTlsStoreSetup (DetectEngineCtx *de_ctx, Signature *s, const char *str)
 {
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     s->flags |= SIG_FLAG_TLSSTORE;
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_TLS_STORE, NULL, DETECT_SM_LIST_POSTMATCH) ==
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_TLS_STORE, NULL, DETECT_SM_LIST_POSTMATCH) ==
             NULL) {
         return -1;
     }

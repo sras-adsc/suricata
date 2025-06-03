@@ -15,11 +15,12 @@
  * 02110-1301, USA.
  */
 
-use super::{
-    DetectHelperTransformRegister, DetectSignatureAddTransform, InspectionBufferCheckAndExpand,
-    InspectionBufferLength, InspectionBufferPtr, InspectionBufferTruncate, SCTransformTableElmt,
-};
 use crate::detect::SIGMATCH_NOOPT;
+use suricata_sys::sys::{
+    DetectEngineCtx, DetectEngineThreadCtx, InspectionBuffer, SCDetectHelperTransformRegister,
+    SCDetectSignatureAddTransform, SCTransformTableElmt, Signature, SCInspectionBufferCheckAndExpand,
+    SCInspectionBufferTruncate,
+};
 
 use std::os::raw::{c_int, c_void};
 use std::ptr;
@@ -27,9 +28,9 @@ use std::ptr;
 static mut G_TRANSFORM_DOT_PREFIX_ID: c_int = 0;
 
 unsafe extern "C" fn dot_prefix_setup(
-    _de: *mut c_void, s: *mut c_void, _raw: *const std::os::raw::c_char,
+    _de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    return DetectSignatureAddTransform(s, G_TRANSFORM_DOT_PREFIX_ID, ptr::null_mut());
+    return SCDetectSignatureAddTransform(s, G_TRANSFORM_DOT_PREFIX_ID, ptr::null_mut());
 }
 
 fn dot_prefix_transform_do(input: &[u8], output: &mut [u8]) {
@@ -41,18 +42,20 @@ fn dot_prefix_transform_do(input: &[u8], output: &mut [u8]) {
     output[0] = b'.';
 }
 
-unsafe extern "C" fn dot_prefix_transform(_det: *mut c_void, buffer: *mut c_void, _ctx: *mut c_void) {
-    let input_len = InspectionBufferLength(buffer);
+unsafe extern "C" fn dot_prefix_transform(
+    _det: *mut DetectEngineThreadCtx, buffer: *mut InspectionBuffer, _ctx: *mut c_void,
+) {
+    let input_len = (*buffer).inspect_len;
     if input_len == 0 {
         return;
     }
-    let output = InspectionBufferCheckAndExpand(buffer, input_len + 1);
+    let output = SCInspectionBufferCheckAndExpand(buffer, input_len + 1);
     if output.is_null() {
         // allocation failure
         return;
     }
     // get input after possible realloc
-    let input = InspectionBufferPtr(buffer);
+    let input = (*buffer).inspect;
     if input.is_null() {
         // allocation failure
         return;
@@ -62,7 +65,7 @@ unsafe extern "C" fn dot_prefix_transform(_det: *mut c_void, buffer: *mut c_void
 
     dot_prefix_transform_do(input, output);
 
-    InspectionBufferTruncate(buffer, input_len + 1);
+    SCInspectionBufferTruncate(buffer, input_len + 1);
 }
 
 #[no_mangle]
@@ -71,14 +74,15 @@ pub unsafe extern "C" fn DetectTransformDotPrefixRegister() {
         name: b"dotprefix\0".as_ptr() as *const libc::c_char,
         desc: b"modify buffer to extract the dotprefix\0".as_ptr() as *const libc::c_char,
         url: b"/rules/transforms.html#dotprefix\0".as_ptr() as *const libc::c_char,
-        Setup: dot_prefix_setup,
+        Setup: Some(dot_prefix_setup),
         flags: SIGMATCH_NOOPT,
-        Transform: dot_prefix_transform,
+        Transform: Some(dot_prefix_transform),
         Free: None,
         TransformValidate: None,
+        TransformId: None,
     };
     unsafe {
-        G_TRANSFORM_DOT_PREFIX_ID = DetectHelperTransformRegister(&kw);
+        G_TRANSFORM_DOT_PREFIX_ID = SCDetectHelperTransformRegister(&kw);
         if G_TRANSFORM_DOT_PREFIX_ID < 0 {
             SCLogWarning!("Failed registering transform dot_prefix");
         }

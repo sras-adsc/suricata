@@ -99,13 +99,13 @@ bool EveFTPLogCommand(void *vtx, SCJsonBuilder *jb)
             if (!reply_truncated && response->truncated) {
                 reply_truncated = true;
             }
-            uint32_t code_len = (uint32_t)strlen((const char *)response->code);
-            if (code_len > 0) {
+            if (response->code_length > 0) {
                 if (!is_cc_array_open) {
                     SCJbOpenArray(jb, "completion_code");
                     is_cc_array_open = true;
                 }
-                SCJbAppendStringFromBytes(jb, (const uint8_t *)response->code, code_len);
+                SCJbAppendStringFromBytes(
+                        jb, (const uint8_t *)response->code, (uint32_t)response->code_length);
             }
             if (response->length) {
                 SCJbAppendStringFromBytes(js_resplist, (const uint8_t *)response->response,
@@ -128,13 +128,18 @@ bool EveFTPLogCommand(void *vtx, SCJsonBuilder *jb)
         SCJbSetUint(jb, "dynamic_port", tx->dyn_port);
     }
 
-    if (tx->command_descriptor.command_code == FTP_COMMAND_PORT ||
-            tx->command_descriptor.command_code == FTP_COMMAND_EPRT) {
-        if (tx->active) {
-            JB_SET_STRING(jb, "mode", "active");
-        } else {
-            JB_SET_STRING(jb, "mode", "passive");
-        }
+    switch (tx->command_descriptor.command_code) {
+        case FTP_COMMAND_PORT:
+        case FTP_COMMAND_EPRT:
+        case FTP_COMMAND_PASV:
+        case FTP_COMMAND_EPSV:
+            if (tx->active) {
+                JB_SET_STRING(jb, "mode", "active");
+            } else {
+                JB_SET_STRING(jb, "mode", "passive");
+            }
+        default:
+            break;
     }
 
     if (tx->done) {

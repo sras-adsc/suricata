@@ -16,28 +16,29 @@
  */
 
 use super::dns::{DNSRcode, DNSRecordType, DNSTransaction, ALPROTO_DNS};
-use crate::core::{DetectEngineThreadCtx, STREAM_TOCLIENT, STREAM_TOSERVER};
+use crate::core::{STREAM_TOCLIENT, STREAM_TOSERVER};
 use crate::detect::uint::{
     detect_match_uint, detect_parse_uint_enum, DetectUintData, SCDetectU16Free, SCDetectU8Free,
     SCDetectU8Parse,
 };
-use crate::detect::{
-    helper_keyword_register_sticky_buffer, DetectHelperBufferRegister,
-    DetectHelperKeywordAliasRegister, DetectHelperKeywordRegister,
-    DetectHelperMultiBufferProgressMpmRegister, DetectSignatureSetAppProto, SCSigTableAppLiteElmt,
-    SigMatchAppendSMToList, SigTableElmtStickyBuffer,
-};
+use crate::detect::{helper_keyword_register_sticky_buffer, SigTableElmtStickyBuffer};
 use crate::direction::Direction;
 use std::ffi::CStr;
 use std::os::raw::{c_int, c_void};
-use suricata_sys::sys::{DetectEngineCtx, SCDetectBufferSetActiveList, Signature};
+use suricata_sys::sys::{
+    DetectEngineCtx, DetectEngineThreadCtx, Flow, SCDetectBufferSetActiveList,
+    SCDetectHelperBufferRegister, SCDetectHelperKeywordAliasRegister,
+    SCDetectHelperKeywordRegister, SCDetectHelperMultiBufferProgressMpmRegister,
+    SCDetectSignatureSetAppProto, SCSigMatchAppendSMToList, SCSigTableAppLiteElmt, SigMatchCtx,
+    Signature,
+};
 
 /// Perform the DNS opcode match.
 ///
 /// 1 will be returned on match, otherwise 0 will be returned.
 unsafe extern "C" fn dns_opcode_match(
-    _de: *mut c_void, _f: *mut c_void, flags: u8, _state: *mut c_void, tx: *mut c_void,
-    _sig: *const c_void, ctx: *const c_void,
+    _de: *mut DetectEngineThreadCtx, _f: *mut Flow, flags: u8, _state: *mut c_void,
+    tx: *mut c_void, _sig: *const Signature, ctx: *const SigMatchCtx,
 ) -> c_int {
     let tx = cast_pointer!(tx, DNSTransaction);
     let ctx = cast_pointer!(ctx, DetectUintData<u8>);
@@ -69,8 +70,8 @@ unsafe extern "C" fn dns_opcode_match(
 ///
 /// 1 will be returned on match, otherwise 0 will be returned.
 unsafe extern "C" fn dns_rcode_match(
-    _de: *mut c_void, _f: *mut c_void, flags: u8, _state: *mut c_void, tx: *mut c_void,
-    _sig: *const c_void, ctx: *const c_void,
+    _de: *mut DetectEngineThreadCtx, _f: *mut Flow, flags: u8, _state: *mut c_void,
+    tx: *mut c_void, _sig: *const Signature, ctx: *const SigMatchCtx,
 ) -> c_int {
     let tx = cast_pointer!(tx, DNSTransaction);
     let ctx = cast_pointer!(ctx, DetectUintData<u16>);
@@ -97,8 +98,8 @@ unsafe extern "C" fn dns_rcode_match(
 /// Perform the DNS rrtype match.
 /// 1 will be returned on match, otherwise 0 will be returned.
 unsafe extern "C" fn dns_rrtype_match(
-    _de: *mut c_void, _f: *mut c_void, flags: u8, _state: *mut c_void, tx: *mut c_void,
-    _sig: *const c_void, ctx: *const c_void,
+    _de: *mut DetectEngineThreadCtx, _f: *mut Flow, flags: u8, _state: *mut c_void,
+    tx: *mut c_void, _sig: *const Signature, ctx: *const SigMatchCtx,
 ) -> c_int {
     let tx = cast_pointer!(tx, DNSTransaction);
     let ctx = cast_pointer!(ctx, DetectUintData<u16>);
@@ -126,31 +127,39 @@ unsafe extern "C" fn dns_rrtype_match(
 static mut G_DNS_ANSWER_NAME_BUFFER_ID: c_int = 0;
 static mut G_DNS_QUERY_NAME_BUFFER_ID: c_int = 0;
 static mut G_DNS_QUERY_BUFFER_ID: c_int = 0;
-static mut G_DNS_OPCODE_KW_ID: c_int = 0;
+static mut G_DNS_OPCODE_KW_ID: u16 = 0;
 static mut G_DNS_OPCODE_BUFFER_ID: c_int = 0;
-static mut G_DNS_RCODE_KW_ID: c_int = 0;
+static mut G_DNS_RCODE_KW_ID: u16 = 0;
 static mut G_DNS_RCODE_BUFFER_ID: c_int = 0;
-static mut G_DNS_RRTYPE_KW_ID: c_int = 0;
+static mut G_DNS_RRTYPE_KW_ID: u16 = 0;
 static mut G_DNS_RRTYPE_BUFFER_ID: c_int = 0;
 
 unsafe extern "C" fn dns_opcode_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, raw: *const libc::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
         return -1;
     }
     let ctx = SCDetectU8Parse(raw) as *mut c_void;
     if ctx.is_null() {
         return -1;
     }
-    if SigMatchAppendSMToList(de, s, G_DNS_OPCODE_KW_ID, ctx, G_DNS_OPCODE_BUFFER_ID).is_null() {
+    if SCSigMatchAppendSMToList(
+        de,
+        s,
+        G_DNS_OPCODE_KW_ID,
+        ctx as *mut SigMatchCtx,
+        G_DNS_OPCODE_BUFFER_ID,
+    )
+    .is_null()
+    {
         dns_opcode_free(std::ptr::null_mut(), ctx);
         return -1;
     }
     return 0;
 }
 
-unsafe extern "C" fn dns_opcode_free(_de: *mut c_void, ctx: *mut c_void) {
+unsafe extern "C" fn dns_opcode_free(_de: *mut DetectEngineCtx, ctx: *mut c_void) {
     // Just unbox...
     let ctx = cast_pointer!(ctx, DetectUintData<u8>);
     SCDetectU8Free(ctx);
@@ -170,21 +179,29 @@ unsafe extern "C" fn dns_rcode_parse(ustr: *const std::os::raw::c_char) -> *mut 
 unsafe extern "C" fn dns_rcode_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, raw: *const libc::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
         return -1;
     }
     let ctx = dns_rcode_parse(raw) as *mut c_void;
     if ctx.is_null() {
         return -1;
     }
-    if SigMatchAppendSMToList(de, s, G_DNS_RCODE_KW_ID, ctx, G_DNS_RCODE_BUFFER_ID).is_null() {
+    if SCSigMatchAppendSMToList(
+        de,
+        s,
+        G_DNS_RCODE_KW_ID,
+        ctx as *mut SigMatchCtx,
+        G_DNS_RCODE_BUFFER_ID,
+    )
+    .is_null()
+    {
         dns_rcode_free(std::ptr::null_mut(), ctx);
         return -1;
     }
     return 0;
 }
 
-unsafe extern "C" fn dns_rcode_free(_de: *mut c_void, ctx: *mut c_void) {
+unsafe extern "C" fn dns_rcode_free(_de: *mut DetectEngineCtx, ctx: *mut c_void) {
     // Just unbox...
     let ctx = cast_pointer!(ctx, DetectUintData<u16>);
     SCDetectU16Free(ctx);
@@ -206,21 +223,29 @@ unsafe extern "C" fn dns_rrtype_parse(
 unsafe extern "C" fn dns_rrtype_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, raw: *const libc::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
         return -1;
     }
     let ctx = dns_rrtype_parse(raw) as *mut c_void;
     if ctx.is_null() {
         return -1;
     }
-    if SigMatchAppendSMToList(de, s, G_DNS_RRTYPE_KW_ID, ctx, G_DNS_RRTYPE_BUFFER_ID).is_null() {
+    if SCSigMatchAppendSMToList(
+        de,
+        s,
+        G_DNS_RRTYPE_KW_ID,
+        ctx as *mut SigMatchCtx,
+        G_DNS_RRTYPE_BUFFER_ID,
+    )
+    .is_null()
+    {
         dns_rrtype_free(std::ptr::null_mut(), ctx);
         return -1;
     }
     return 0;
 }
 
-unsafe extern "C" fn dns_rrtype_free(_de: *mut c_void, ctx: *mut c_void) {
+unsafe extern "C" fn dns_rrtype_free(_de: *mut DetectEngineCtx, ctx: *mut c_void) {
     // Just unbox...
     let ctx = cast_pointer!(ctx, DetectUintData<u16>);
     SCDetectU16Free(ctx);
@@ -229,7 +254,7 @@ unsafe extern "C" fn dns_rrtype_free(_de: *mut c_void, ctx: *mut c_void) {
 unsafe extern "C" fn dns_detect_answer_name_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_DNS_ANSWER_NAME_BUFFER_ID) < 0 {
@@ -239,7 +264,7 @@ unsafe extern "C" fn dns_detect_answer_name_setup(
 }
 
 /// Get the DNS response answer name and index i.
-unsafe extern "C" fn dns_tx_get_answer_name(
+pub(crate) unsafe extern "C" fn dns_tx_get_answer_name(
     _de: *mut DetectEngineThreadCtx, tx: *const c_void, flags: u8, i: u32, buf: *mut *const u8,
     len: *mut u32,
 ) -> bool {
@@ -267,7 +292,7 @@ unsafe extern "C" fn dns_tx_get_answer_name(
 unsafe extern "C" fn dns_detect_query_name_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_DNS_QUERY_NAME_BUFFER_ID) < 0 {
@@ -277,7 +302,7 @@ unsafe extern "C" fn dns_detect_query_name_setup(
 }
 
 /// Get the DNS response answer name and index i.
-unsafe extern "C" fn dns_tx_get_query_name(
+pub(crate) unsafe extern "C" fn dns_tx_get_query_name(
     _de: *mut DetectEngineThreadCtx, tx: *const c_void, flags: u8, i: u32, buf: *mut *const u8,
     len: *mut u32,
 ) -> bool {
@@ -312,7 +337,7 @@ unsafe extern "C" fn dns_tx_get_query(
 unsafe extern "C" fn dns_detect_query_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_DNS) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_DNS_QUERY_BUFFER_ID) < 0 {
@@ -330,14 +355,14 @@ pub unsafe extern "C" fn SCDetectDNSRegister() {
         setup: dns_detect_answer_name_setup,
     };
     let _g_dns_answer_name_kw_id = helper_keyword_register_sticky_buffer(&kw);
-    G_DNS_ANSWER_NAME_BUFFER_ID = DetectHelperMultiBufferProgressMpmRegister(
+    G_DNS_ANSWER_NAME_BUFFER_ID = SCDetectHelperMultiBufferProgressMpmRegister(
         b"dns.answer.name\0".as_ptr() as *const libc::c_char,
         b"dns answer name\0".as_ptr() as *const libc::c_char,
         ALPROTO_DNS,
         STREAM_TOSERVER | STREAM_TOCLIENT,
         /* Register also in the TO_SERVER direction, even though this is not
         normal, it could be provided as part of a request. */
-        dns_tx_get_answer_name,
+        Some(dns_tx_get_answer_name),
         1, // response complete
     );
     let kw = SCSigTableAppLiteElmt {
@@ -345,12 +370,12 @@ pub unsafe extern "C" fn SCDetectDNSRegister() {
         desc: b"Match the DNS header opcode flag.\0".as_ptr() as *const libc::c_char,
         url: b"rules/dns-keywords.html#dns-opcode\0".as_ptr() as *const libc::c_char,
         AppLayerTxMatch: Some(dns_opcode_match),
-        Setup: dns_opcode_setup,
+        Setup: Some(dns_opcode_setup),
         Free: Some(dns_opcode_free),
         flags: 0,
     };
-    G_DNS_OPCODE_KW_ID = DetectHelperKeywordRegister(&kw);
-    G_DNS_OPCODE_BUFFER_ID = DetectHelperBufferRegister(
+    G_DNS_OPCODE_KW_ID = SCDetectHelperKeywordRegister(&kw);
+    G_DNS_OPCODE_BUFFER_ID = SCDetectHelperBufferRegister(
         b"dns.opcode\0".as_ptr() as *const libc::c_char,
         ALPROTO_DNS,
         STREAM_TOSERVER | STREAM_TOCLIENT,
@@ -362,14 +387,14 @@ pub unsafe extern "C" fn SCDetectDNSRegister() {
         setup: dns_detect_query_name_setup,
     };
     let _g_dns_query_name_kw_id = helper_keyword_register_sticky_buffer(&kw);
-    G_DNS_QUERY_NAME_BUFFER_ID = DetectHelperMultiBufferProgressMpmRegister(
+    G_DNS_QUERY_NAME_BUFFER_ID = SCDetectHelperMultiBufferProgressMpmRegister(
         b"dns.query.name\0".as_ptr() as *const libc::c_char,
         b"dns query name\0".as_ptr() as *const libc::c_char,
         ALPROTO_DNS,
         STREAM_TOSERVER | STREAM_TOCLIENT,
         /* Register in both directions as the query is usually echoed back
         in the response. */
-        dns_tx_get_query_name,
+        Some(dns_tx_get_query_name),
         1, // request or response complete
     );
     let kw = SCSigTableAppLiteElmt {
@@ -377,12 +402,12 @@ pub unsafe extern "C" fn SCDetectDNSRegister() {
         desc: b"Match the DNS header rcode flag.\0".as_ptr() as *const libc::c_char,
         url: b"rules/dns-keywords.html#dns-rcode\0".as_ptr() as *const libc::c_char,
         AppLayerTxMatch: Some(dns_rcode_match),
-        Setup: dns_rcode_setup,
+        Setup: Some(dns_rcode_setup),
         Free: Some(dns_rcode_free),
         flags: 0,
     };
-    G_DNS_RCODE_KW_ID = DetectHelperKeywordRegister(&kw);
-    G_DNS_RCODE_BUFFER_ID = DetectHelperBufferRegister(
+    G_DNS_RCODE_KW_ID = SCDetectHelperKeywordRegister(&kw);
+    G_DNS_RCODE_BUFFER_ID = SCDetectHelperBufferRegister(
         b"dns.rcode\0".as_ptr() as *const libc::c_char,
         ALPROTO_DNS,
         STREAM_TOSERVER | STREAM_TOCLIENT,
@@ -392,12 +417,12 @@ pub unsafe extern "C" fn SCDetectDNSRegister() {
         desc: b"Match the DNS rrtype in message body.\0".as_ptr() as *const libc::c_char,
         url: b"rules/dns-keywords.html#dns-rrtype\0".as_ptr() as *const libc::c_char,
         AppLayerTxMatch: Some(dns_rrtype_match),
-        Setup: dns_rrtype_setup,
+        Setup: Some(dns_rrtype_setup),
         Free: Some(dns_rrtype_free),
         flags: 0,
     };
-    G_DNS_RRTYPE_KW_ID = DetectHelperKeywordRegister(&kw);
-    G_DNS_RRTYPE_BUFFER_ID = DetectHelperBufferRegister(
+    G_DNS_RRTYPE_KW_ID = SCDetectHelperKeywordRegister(&kw);
+    G_DNS_RRTYPE_BUFFER_ID = SCDetectHelperBufferRegister(
         b"dns.rrtype\0".as_ptr() as *const libc::c_char,
         ALPROTO_DNS,
         STREAM_TOSERVER | STREAM_TOCLIENT,
@@ -409,17 +434,17 @@ pub unsafe extern "C" fn SCDetectDNSRegister() {
         setup: dns_detect_query_setup,
     };
     let g_dns_query_name_kw_id = helper_keyword_register_sticky_buffer(&kw);
-    DetectHelperKeywordAliasRegister(
+    SCDetectHelperKeywordAliasRegister(
         g_dns_query_name_kw_id,
         b"dns_query\0".as_ptr() as *const libc::c_char,
     );
-    G_DNS_QUERY_BUFFER_ID = DetectHelperMultiBufferProgressMpmRegister(
+    G_DNS_QUERY_BUFFER_ID = SCDetectHelperMultiBufferProgressMpmRegister(
         b"dns_query\0".as_ptr() as *const libc::c_char,
         b"dns request query\0".as_ptr() as *const libc::c_char,
         ALPROTO_DNS,
         STREAM_TOSERVER,
-        dns_tx_get_query, // reuse, will be called only toserver
-        1,                // request complete
+        Some(dns_tx_get_query), // reuse, will be called only toserver
+        1,                      // request complete
     );
 }
 

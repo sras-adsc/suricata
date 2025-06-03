@@ -95,10 +95,13 @@ pub mod detect;
 pub mod utils;
 
 pub mod ja4;
+pub mod tls_version;
+pub mod handshake;
 
 pub mod lua;
 
 pub mod dns;
+pub mod mdns;
 pub mod nfs;
 pub mod ftp;
 pub mod smb;

@@ -315,6 +315,7 @@ enum DetectKeywordId {
     DETECT_TRANSFORM_TOUPPER,
     DETECT_TRANSFORM_HEADER_LOWERCASE,
     DETECT_TRANSFORM_FROM_BASE64,
+    DETECT_TRANSFORM_LUAXFORM,
 
     DETECT_IKE_EXCH_TYPE,
     DETECT_IKE_SPI_INITIATOR,
@@ -331,6 +332,9 @@ enum DetectKeywordId {
     DETECT_FTP_COMMAND,
     DETECT_FTP_COMMAND_DATA,
     DETECT_FTP_REPLY,
+    DETECT_FTP_MODE,
+    DETECT_FTP_REPLY_RECEIVED,
+    DETECT_FTP_COMPLETION_CODE,
 
     DETECT_VLAN_ID,
     DETECT_VLAN_LAYERS,
@@ -350,6 +354,6 @@ void SigTableSetup(void);
 int SCSigTablePreRegister(void (*KeywordsRegister)(void));
 void SigTableRegisterTests(void);
 bool SigTableHasKeyword(const char *keyword);
-void DetectHelperKeywordSetCleanCString(int id);
+void SCDetectHelperKeywordSetCleanCString(uint16_t id);
 
 #endif /* SURICATA_DETECT_ENGINE_REGISTER_H */

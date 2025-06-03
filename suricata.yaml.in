@@ -281,6 +281,7 @@ outputs:
             # DNS record types to log, based on the query type.
             # Default: all.
             #types: [a, aaaa, cname, mx, ns, ptr, txt]
+        - mdns:
         - tls:
             extended: yes     # enable this for extended logging information
             # output TLS transaction where the session is resumed using a
@@ -288,7 +289,7 @@ outputs:
             #session-resumption: no
             # custom controls which TLS fields that are included in eve-log
             # WARNING: enabling custom disables extended logging.
-            #custom: [subject, issuer, session_resumed, serial, fingerprint, sni, version, not_before, not_after, certificate, chain, ja3, ja3s, ja4, subjectaltname, client, client_certificate, client_chain, client_alpns, server_alpns]
+            #custom: [subject, issuer, session_resumed, serial, fingerprint, sni, version, not_before, not_after, certificate, chain, ja3, ja3s, ja4, subjectaltname, client, client_certificate, client_chain, client_alpns, server_alpns, client_handshake, server_handshake]
         - files:
             force-magic: no   # force logging magic on all logged files
             # force logging of checksums, available hash functions are md5,
@@ -360,6 +361,8 @@ outputs:
         - pgsql:
             enabled: no
             # passwords: yes           # enable output of passwords. Disabled by default
+                                       # If a password message is seen but this setting
+                                       # is disabled, "password_redacted": true is logged
         - stats:
             totals: yes       # stats for all threads merged together
             threads: no       # per thread stats
@@ -885,7 +888,16 @@ pcap-file:
   # Warning: 'checksum-validation' must be set to yes to have checksum tested
   checksum-checks: auto
   # Read buffer size set using setvbuf. Max value is 64 MiB. Linux only.
-  #buffer-size: 128 KiB
+  # buffer-size: 128 KiB
+
+  # tenant-id: none # applies in multi-tenant environment with "direct" selector
+  # delete-when-done: false # applies to file and directory
+
+  # PCAP Directory Processing options
+  # recursive: false
+  # continuous: false
+  # delay: 30 # seconds to wait before processing the newly added PCAPs
+  # poll-interval: 5 # how often to check the directory
 
 # See "Advanced Capture Options" below for more options, including Netmap
 # and PF_RING.
@@ -1243,6 +1255,9 @@ app-layer:
           dp: 389, 3268
       # Maximum number of live LDAP transactions per flow
       # max-tx: 1024
+
+    mdns:
+      enabled: yes
 
 # Limit for the maximum number of asn1 frames to decode (default 256)
 asn1-max-frames: 256

@@ -414,7 +414,7 @@ static int DetectTlsExpiredSetup (DetectEngineCtx *de_ctx, Signature *s,
 
     SCLogDebug("\'%s\'", rawstr);
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     dd = SCCalloc(1, sizeof(DetectTlsValidityData));
@@ -431,7 +431,7 @@ static int DetectTlsExpiredSetup (DetectEngineCtx *de_ctx, Signature *s,
     dd->epoch = 0;
     dd->epoch2 = 0;
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_TLS_EXPIRED, (SigMatchCtx *)dd,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_TLS_EXPIRED, (SigMatchCtx *)dd,
                 g_tls_validity_buffer_id) == NULL) {
         goto error;
     }
@@ -459,7 +459,7 @@ static int DetectTlsValidSetup (DetectEngineCtx *de_ctx, Signature *s,
 
     SCLogDebug("\'%s\'", rawstr);
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     dd = SCCalloc(1, sizeof(DetectTlsValidityData));
@@ -476,7 +476,7 @@ static int DetectTlsValidSetup (DetectEngineCtx *de_ctx, Signature *s,
     dd->epoch = 0;
     dd->epoch2 = 0;
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_TLS_VALID, (SigMatchCtx *)dd, g_tls_validity_buffer_id) == NULL) {
         goto error;
     }
@@ -543,7 +543,7 @@ static int DetectTlsValiditySetup (DetectEngineCtx *de_ctx, Signature *s,
 
     SCLogDebug("\'%s\'", rawstr);
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     dd = DetectTlsValidityParse(rawstr);
@@ -565,7 +565,7 @@ static int DetectTlsValiditySetup (DetectEngineCtx *de_ctx, Signature *s,
         goto error;
     }
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_TLS_NOTAFTER, (SigMatchCtx *)dd,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_TLS_NOTAFTER, (SigMatchCtx *)dd,
                 g_tls_validity_buffer_id) == NULL) {
         goto error;
     }

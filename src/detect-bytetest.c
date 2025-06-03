@@ -324,7 +324,7 @@ static DetectBytetestData *DetectBytetestParse(
     int res = 0;
     size_t pcre2_len;
     int i;
-    uint32_t nbytes;
+    uint32_t nbytes = 0;
     const char *str_ptr = NULL;
     pcre2_match_data *match = NULL;
 
@@ -611,7 +611,7 @@ static int DetectBytetestSetup(DetectEngineCtx *de_ctx, Signature *s, const char
             sm_list = DETECT_SM_LIST_PMATCH;
         }
 
-        if (DetectSignatureSetAppProto(s, ALPROTO_DCERPC) != 0)
+        if (SCDetectSignatureSetAppProto(s, ALPROTO_DCERPC) != 0)
             goto error;
 
     } else if (data->flags & DETECT_BYTETEST_RELATIVE) {
@@ -686,7 +686,8 @@ static int DetectBytetestSetup(DetectEngineCtx *de_ctx, Signature *s, const char
         nbytes = NULL;
     }
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_BYTETEST, (SigMatchCtx *)data, sm_list) == NULL) {
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_BYTETEST, (SigMatchCtx *)data, sm_list) ==
+            NULL) {
         goto error;
     }
 
@@ -1053,7 +1054,7 @@ static int DetectBytetestTestParse19(void)
     Signature *s = SigAlloc();
     FAIL_IF_NULL(s);
 
-    FAIL_IF(DetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0);
+    FAIL_IF(SCDetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0);
 
     FAIL_IF_NOT(DetectBytetestSetup(NULL, s, "1,=,1,6,dce") == 0);
     FAIL_IF_NOT(DetectBytetestSetup(NULL, s, "1,=,1,6,string,dce") == -1);

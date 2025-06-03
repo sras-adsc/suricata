@@ -132,7 +132,7 @@ static int DetectDceOpnumSetup(DetectEngineCtx *de_ctx, Signature *s, const char
         return -1;
     }
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0)
         return -1;
 
     void *dod = SCDcerpcOpnumParse(arg);
@@ -142,7 +142,7 @@ static int DetectDceOpnumSetup(DetectEngineCtx *de_ctx, Signature *s, const char
         return -1;
     }
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_DCE_OPNUM, (SigMatchCtx *)dod, g_dce_generic_list_id) == NULL) {
         DetectDceOpnumFree(de_ctx, dod);
         return -1;

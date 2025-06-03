@@ -106,7 +106,7 @@ static int DetectIkeNoncePayloadLengthMatch(DetectEngineThreadCtx *det_ctx, Flow
 static int DetectIkeNoncePayloadLengthSetup(
         DetectEngineCtx *de_ctx, Signature *s, const char *rawstr)
 {
-    if (DetectSignatureSetAppProto(s, ALPROTO_IKE) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_IKE) != 0)
         return -1;
 
     DetectU32Data *nonce_payload_length = DetectU32Parse(rawstr);
@@ -116,7 +116,7 @@ static int DetectIkeNoncePayloadLengthSetup(
     /* okay so far so good, lets get this into a SigMatch
      * and put it in the Signature. */
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_IKE_NONCE_PAYLOAD_LENGTH,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_IKE_NONCE_PAYLOAD_LENGTH,
                 (SigMatchCtx *)nonce_payload_length,
                 g_ike_nonce_payload_length_buffer_id) == NULL) {
         goto error;

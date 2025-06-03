@@ -17,16 +17,17 @@
 
 // written by Giuseppe Longo <giuseppe@glongo.it>
 
-use crate::core::{DetectEngineThreadCtx, STREAM_TOCLIENT, STREAM_TOSERVER};
-use crate::detect::{
-    helper_keyword_register_sticky_buffer, DetectHelperBufferMpmRegister, DetectHelperGetData,
-    DetectHelperMultiBufferMpmRegister, DetectSignatureSetAppProto, SigTableElmtStickyBuffer,
-};
+use crate::core::{STREAM_TOCLIENT, STREAM_TOSERVER};
+use crate::detect::{helper_keyword_register_sticky_buffer, SigTableElmtStickyBuffer};
 use crate::direction::Direction;
 use crate::sip::sip::{SIPTransaction, ALPROTO_SIP};
 use std::os::raw::{c_int, c_void};
 use std::ptr;
-use suricata_sys::sys::{DetectEngineCtx, SCDetectBufferSetActiveList, Signature};
+use suricata_sys::sys::{
+    DetectEngineCtx, DetectEngineThreadCtx, SCDetectBufferSetActiveList,
+    SCDetectHelperBufferMpmRegister, SCDetectHelperMultiBufferMpmRegister,
+    SCDetectSignatureSetAppProto, Signature,
+};
 
 static mut G_SDP_ORIGIN_BUFFER_ID: c_int = 0;
 static mut G_SDP_SESSION_NAME_BUFFER_ID: c_int = 0;
@@ -49,7 +50,7 @@ static mut G_SDP_MEDIA_DESC_ENCRYPTION_KEY_BUFFER_ID: c_int = 0;
 unsafe extern "C" fn sdp_session_name_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_SESSION_NAME_BUFFER_ID) < 0 {
@@ -59,21 +60,6 @@ unsafe extern "C" fn sdp_session_name_setup(
 }
 
 unsafe extern "C" fn sdp_session_name_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_session_name_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_session_name_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -97,7 +83,7 @@ unsafe extern "C" fn sdp_session_name_get_data(
 unsafe extern "C" fn sdp_session_info_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_SESSION_INFO_BUFFER_ID) < 0 {
@@ -107,21 +93,6 @@ unsafe extern "C" fn sdp_session_info_setup(
 }
 
 unsafe extern "C" fn sdp_session_info_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_session_info_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_session_info_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -144,7 +115,7 @@ unsafe extern "C" fn sdp_session_info_get_data(
 unsafe extern "C" fn sdp_origin_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_ORIGIN_BUFFER_ID) < 0 {
@@ -154,21 +125,6 @@ unsafe extern "C" fn sdp_origin_setup(
 }
 
 unsafe extern "C" fn sdp_origin_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_origin_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_origin_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -192,7 +148,7 @@ unsafe extern "C" fn sdp_origin_get_data(
 unsafe extern "C" fn sdp_uri_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_URI_BUFFER_ID) < 0 {
@@ -202,21 +158,6 @@ unsafe extern "C" fn sdp_uri_setup(
 }
 
 unsafe extern "C" fn sdp_uri_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_uri_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_uri_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -239,7 +180,7 @@ unsafe extern "C" fn sdp_uri_get_data(
 unsafe extern "C" fn sdp_email_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_EMAIL_BUFFER_ID) < 0 {
@@ -249,21 +190,6 @@ unsafe extern "C" fn sdp_email_setup(
 }
 
 unsafe extern "C" fn sdp_email_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_email_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_email_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -286,7 +212,7 @@ unsafe extern "C" fn sdp_email_get_data(
 unsafe extern "C" fn sdp_phone_number_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_PHONE_NUMBER_BUFFER_ID) < 0 {
@@ -296,21 +222,6 @@ unsafe extern "C" fn sdp_phone_number_setup(
 }
 
 unsafe extern "C" fn sdp_phone_number_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_phone_number_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_phone_number_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -333,7 +244,7 @@ unsafe extern "C" fn sdp_phone_number_get_data(
 unsafe extern "C" fn sdp_conn_data_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_CONNECTION_DATA_BUFFER_ID) < 0 {
@@ -343,21 +254,6 @@ unsafe extern "C" fn sdp_conn_data_setup(
 }
 
 unsafe extern "C" fn sdp_conn_data_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_conn_data_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_conn_data_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -380,7 +276,7 @@ unsafe extern "C" fn sdp_conn_data_get_data(
 unsafe extern "C" fn sdp_bandwidth_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_BANDWIDTH_BUFFER_ID) < 0 {
@@ -417,7 +313,7 @@ unsafe extern "C" fn sip_bandwidth_get_data(
 unsafe extern "C" fn sdp_time_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_TIME_BUFFER_ID) < 0 {
@@ -452,7 +348,7 @@ unsafe extern "C" fn sdp_time_get_data(
 unsafe extern "C" fn sdp_repeat_time_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_REPEAT_TIME_BUFFER_ID) < 0 {
@@ -489,7 +385,7 @@ unsafe extern "C" fn sdp_repeat_time_get_data(
 unsafe extern "C" fn sdp_timezone_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_TIMEZONE_BUFFER_ID) < 0 {
@@ -499,21 +395,6 @@ unsafe extern "C" fn sdp_timezone_setup(
 }
 
 unsafe extern "C" fn sdp_timezone_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_timezone_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_timezone_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -536,7 +417,7 @@ unsafe extern "C" fn sdp_timezone_get_data(
 unsafe extern "C" fn sdp_encryption_key_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_ENCRYPTION_KEY_BUFFER_ID) < 0 {
@@ -546,21 +427,6 @@ unsafe extern "C" fn sdp_encryption_key_setup(
 }
 
 unsafe extern "C" fn sdp_encryption_key_get(
-    de: *mut c_void, transforms: *const c_void, flow: *const c_void, flow_flags: u8,
-    tx: *const c_void, list_id: c_int,
-) -> *mut c_void {
-    return DetectHelperGetData(
-        de,
-        transforms,
-        flow,
-        flow_flags,
-        tx,
-        list_id,
-        sdp_encryption_key_get_data,
-    );
-}
-
-unsafe extern "C" fn sdp_encryption_key_get_data(
     tx: *const c_void, direction: u8, buffer: *mut *const u8, buffer_len: *mut u32,
 ) -> bool {
     let tx = cast_pointer!(tx, SIPTransaction);
@@ -583,7 +449,7 @@ unsafe extern "C" fn sdp_encryption_key_get_data(
 unsafe extern "C" fn sdp_attribute_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_ATTRIBUTE_BUFFER_ID) < 0 {
@@ -620,7 +486,7 @@ unsafe extern "C" fn sip_attribute_get_data(
 unsafe extern "C" fn sdp_media_desc_media_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_MEDIA_DESC_MEDIA_BUFFER_ID) < 0 {
@@ -657,7 +523,7 @@ unsafe extern "C" fn sip_media_desc_media_get_data(
 unsafe extern "C" fn sdp_media_desc_session_info_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_MEDIA_DESC_SESSION_INFO_BUFFER_ID) < 0 {
@@ -695,7 +561,7 @@ unsafe extern "C" fn sip_media_desc_session_info_get_data(
 unsafe extern "C" fn sdp_media_desc_connection_data_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_MEDIA_DESC_CONNECTION_DATA_BUFFER_ID) < 0 {
@@ -733,7 +599,7 @@ unsafe extern "C" fn sip_media_desc_connection_data_get_data(
 unsafe extern "C" fn sdp_media_desc_encryption_key_setup(
     de: *mut DetectEngineCtx, s: *mut Signature, _raw: *const std::os::raw::c_char,
 ) -> c_int {
-    if DetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
+    if SCDetectSignatureSetAppProto(s, ALPROTO_SIP) != 0 {
         return -1;
     }
     if SCDetectBufferSetActiveList(de, s, G_SDP_MEDIA_DESC_ENCRYPTION_KEY_BUFFER_ID) < 0 {
@@ -777,12 +643,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_session_name_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_SESSION_NAME_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_SESSION_NAME_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.session_name\0".as_ptr() as *const libc::c_char,
         b"sdp.session_name\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_session_name_get,
+        Some(sdp_session_name_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.session_info"),
@@ -791,12 +657,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_session_info_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_SESSION_INFO_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_SESSION_INFO_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.session_info\0".as_ptr() as *const libc::c_char,
         b"sdp.session_info\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_session_info_get,
+        Some(sdp_session_info_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.origin"),
@@ -805,12 +671,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_origin_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_ORIGIN_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_ORIGIN_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.origin\0".as_ptr() as *const libc::c_char,
         b"sdp.origin\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_origin_get,
+        Some(sdp_origin_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.uri"),
@@ -819,12 +685,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_uri_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_URI_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_URI_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.uri\0".as_ptr() as *const libc::c_char,
         b"sdp.uri\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_uri_get,
+        Some(sdp_uri_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.email"),
@@ -833,12 +699,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_email_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_EMAIL_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_EMAIL_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.email\0".as_ptr() as *const libc::c_char,
         b"sdp.email\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_email_get,
+        Some(sdp_email_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.phone_number"),
@@ -847,12 +713,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_phone_number_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_PHONE_NUMBER_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_PHONE_NUMBER_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.phone_number\0".as_ptr() as *const libc::c_char,
         b"sdp.phone_number\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_phone_number_get,
+        Some(sdp_phone_number_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.connection_data"),
@@ -861,12 +727,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_conn_data_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_CONNECTION_DATA_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_CONNECTION_DATA_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.connection_data\0".as_ptr() as *const libc::c_char,
         b"sdp.connection_data\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_conn_data_get,
+        Some(sdp_conn_data_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.bandwidth"),
@@ -875,12 +741,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_bandwidth_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_BANDWIDTH_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_BANDWIDTH_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.bandwidth\0".as_ptr() as *const libc::c_char,
         b"sdp.bandwidth\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sip_bandwidth_get_data,
+        Some(sip_bandwidth_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.time"),
@@ -889,12 +755,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_time_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_TIME_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_TIME_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.time\0".as_ptr() as *const libc::c_char,
         b"sdp.time\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_time_get_data,
+        Some(sdp_time_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.repeat_time"),
@@ -903,12 +769,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_repeat_time_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_REPEAT_TIME_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_REPEAT_TIME_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.repeat_time\0".as_ptr() as *const libc::c_char,
         b"sdp.repeat_time\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_repeat_time_get_data,
+        Some(sdp_repeat_time_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.timezone"),
@@ -917,12 +783,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_timezone_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_TIMEZONE_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_TIMEZONE_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.timezone\0".as_ptr() as *const libc::c_char,
         b"sdp.timezone\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_timezone_get,
+        Some(sdp_timezone_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.encryption_key"),
@@ -931,12 +797,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_encryption_key_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_ENCRYPTION_KEY_BUFFER_ID = DetectHelperBufferMpmRegister(
+    G_SDP_ENCRYPTION_KEY_BUFFER_ID = SCDetectHelperBufferMpmRegister(
         b"sdp.encryption_key\0".as_ptr() as *const libc::c_char,
         b"sdp.encription_key\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sdp_encryption_key_get,
+        Some(sdp_encryption_key_get),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.attribute"),
@@ -945,12 +811,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_attribute_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_ATTRIBUTE_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_ATTRIBUTE_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.attribute\0".as_ptr() as *const libc::c_char,
         b"sdp.attribute\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sip_attribute_get_data,
+        Some(sip_attribute_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.media.media"),
@@ -961,12 +827,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_media_desc_media_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_MEDIA_DESC_MEDIA_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_MEDIA_DESC_MEDIA_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.media.media\0".as_ptr() as *const libc::c_char,
         b"sdp.media.media\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sip_media_desc_media_get_data,
+        Some(sip_media_desc_media_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.media.media_info"),
@@ -975,12 +841,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_media_desc_session_info_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_MEDIA_DESC_SESSION_INFO_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_MEDIA_DESC_SESSION_INFO_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.media.media_info\0".as_ptr() as *const libc::c_char,
         b"sdp.media.media_info\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sip_media_desc_session_info_get_data,
+        Some(sip_media_desc_session_info_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.media.connection_data"),
@@ -989,12 +855,12 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_media_desc_connection_data_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_MEDIA_DESC_CONNECTION_DATA_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_MEDIA_DESC_CONNECTION_DATA_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.media.connection_data\0".as_ptr() as *const libc::c_char,
         b"sdp.media.connection_data\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sip_media_desc_connection_data_get_data,
+        Some(sip_media_desc_connection_data_get_data),
     );
     let kw = SigTableElmtStickyBuffer {
         name: String::from("sdp.media.encryption_key"),
@@ -1003,11 +869,11 @@ pub unsafe extern "C" fn SCDetectSdpRegister() {
         setup: sdp_media_desc_encryption_key_setup,
     };
     let _ = helper_keyword_register_sticky_buffer(&kw);
-    G_SDP_MEDIA_DESC_ENCRYPTION_KEY_BUFFER_ID = DetectHelperMultiBufferMpmRegister(
+    G_SDP_MEDIA_DESC_ENCRYPTION_KEY_BUFFER_ID = SCDetectHelperMultiBufferMpmRegister(
         b"sdp.media.encryption_key\0".as_ptr() as *const libc::c_char,
         b"sdp.media.encryption_key\0".as_ptr() as *const libc::c_char,
         ALPROTO_SIP,
         STREAM_TOSERVER | STREAM_TOCLIENT,
-        sip_media_desc_encryption_key_get_data,
+        Some(sip_media_desc_encryption_key_get_data),
     );
 }

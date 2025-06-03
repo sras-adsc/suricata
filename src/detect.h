@@ -31,6 +31,7 @@
 #include "detect-reference.h"
 #include "detect-metadata.h"
 #include "detect-engine-register.h"
+#include "detect-engine-inspect-buffer.h"
 
 #include "util-prefilter.h"
 #include "util-mpm.h"
@@ -370,30 +371,6 @@ typedef struct SigMatchData_ {
 
 struct DetectEngineThreadCtx_;// DetectEngineThreadCtx;
 
-/* inspection buffer is a simple structure that is passed between prefilter,
- * transformation functions and inspection functions.
- * Initially setup with 'orig' ptr and len, transformations can then take
- * then and fill the 'buf'. Multiple transformations can update the buffer,
- * both growing and shrinking it.
- * Prefilter and inspection will only deal with 'inspect'. */
-
-typedef struct InspectionBuffer {
-    const uint8_t *inspect; /**< active pointer, points either to ::buf or ::orig */
-    uint64_t inspect_offset;
-    uint32_t inspect_len;   /**< size of active data. See to ::len or ::orig_len */
-    bool initialized; /**< is initialized. ::inspect might be NULL if transform lead to 0 size */
-    uint8_t flags;          /**< DETECT_CI_FLAGS_* for use with DetectEngineContentInspection */
-#ifdef DEBUG_VALIDATION
-    bool multi;
-#endif
-    uint32_t len;           /**< how much is in use */
-    uint8_t *buf;
-    uint32_t size;          /**< size of the memory allocation */
-
-    uint32_t orig_len;
-    const uint8_t *orig;
-} InspectionBuffer;
-
 /* inspection buffers are kept per tx (in det_ctx), but some protocols
  * need a bit more. A single TX might have multiple buffers, e.g. files in
  * SMTP or DNS queries. Since all prefilters+transforms run before the
@@ -424,6 +401,9 @@ typedef InspectionBuffer *(*InspectionBufferGetDataPtr)(
         Flow *f, const uint8_t flow_flags,
         void *txv, const int list_id);
 
+typedef bool (*InspectionSingleBufferGetDataPtr)(
+        const void *txv, const uint8_t flow_flags, const uint8_t **buf, uint32_t *buf_len);
+
 typedef bool (*InspectionMultiBufferGetDataPtr)(struct DetectEngineThreadCtx_ *det_ctx,
         const void *txv, const uint8_t flow_flags, uint32_t local_id, const uint8_t **buf,
         uint32_t *buf_len);
@@ -449,6 +429,7 @@ typedef struct DetectEngineAppInspectionEngine_ {
     struct {
         union {
             InspectionBufferGetDataPtr GetData;
+            InspectionSingleBufferGetDataPtr GetDataSingle;
             InspectionMultiBufferGetDataPtr GetMultiData;
         };
         InspectEngineFuncPtr Callback;
@@ -460,6 +441,11 @@ typedef struct DetectEngineAppInspectionEngine_ {
 
     struct DetectEngineAppInspectionEngine_ *next;
 } DetectEngineAppInspectionEngine;
+
+typedef struct TransformIdData_ {
+    const uint8_t *id_data;
+    uint32_t id_data_len;
+} TransformIdData;
 
 typedef struct DetectBufferType_ {
     char name[64];
@@ -475,6 +461,7 @@ typedef struct DetectBufferType_ {
     bool (*ValidateCallback)(
             const struct Signature_ *, const char **sigerror, const struct DetectBufferType_ *);
     DetectEngineTransforms transforms;
+    TransformIdData xform_id[DETECT_TRANSFORMS_MAX];
 } DetectBufferType;
 
 struct DetectEnginePktInspectionEngine;
@@ -679,7 +666,7 @@ typedef struct Signature_ {
     uint8_t dsize_mode;
 
     SignatureMask mask;
-    SigIntId num; /**< signature number, internal id */
+    SigIntId iid; /**< signature internal id */
 
     /** inline -- action */
     uint8_t action;
@@ -781,6 +768,7 @@ typedef struct DetectBufferMpmRegistry_ {
         struct {
             union {
                 InspectionBufferGetDataPtr GetData;
+                InspectionSingleBufferGetDataPtr GetDataSingle;
                 InspectionMultiBufferGetDataPtr GetMultiData;
             };
             AppProto alproto;
@@ -1408,6 +1396,9 @@ typedef struct SigTableElmt_ {
     /** InspectionBuffer transformation callback */
     void (*Transform)(DetectEngineThreadCtx *, InspectionBuffer *, void *context);
     bool (*TransformValidate)(const uint8_t *content, uint16_t content_len, void *context);
+
+    /** Transform identity callback */
+    void (*TransformId)(const uint8_t **data, uint32_t *length, void *context);
 
     /** keyword setup function pointer */
     int (*Setup)(DetectEngineCtx *, Signature *, const char *);

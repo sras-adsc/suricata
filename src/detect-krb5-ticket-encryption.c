@@ -45,14 +45,14 @@ static int DetectKrb5TicketEncryptionSetup(
 {
     DetectKrb5TicketEncryptionData *krb5d = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_KRB5) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_KRB5) != 0)
         return -1;
 
     krb5d = SCKrb5DetectEncryptionParse(krb5str);
     if (krb5d == NULL)
         goto error;
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_KRB5_TICKET_ENCRYPTION, (SigMatchCtx *)krb5d,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_KRB5_TICKET_ENCRYPTION, (SigMatchCtx *)krb5d,
                 g_krb5_ticket_encryption_list_id) == NULL) {
         goto error;
     }

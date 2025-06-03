@@ -304,14 +304,14 @@ static int DetectSslStateSetup(DetectEngineCtx *de_ctx, Signature *s, const char
 {
     DetectSslStateData *ssd = NULL;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     ssd = DetectSslStateParse(arg);
     if (ssd == NULL)
         goto error;
 
-    if (SigMatchAppendSMToList(
+    if (SCSigMatchAppendSMToList(
                 de_ctx, s, DETECT_SSL_STATE, (SigMatchCtx *)ssd, g_tls_generic_list_id) == NULL) {
         goto error;
     }

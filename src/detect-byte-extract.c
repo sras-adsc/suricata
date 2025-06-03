@@ -286,7 +286,7 @@ static int DetectByteExtractSetup(DetectEngineCtx *de_ctx, Signature *s, const c
             sm_list = DETECT_SM_LIST_PMATCH;
         }
 
-        if (DetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0)
+        if (SCDetectSignatureSetAppProto(s, ALPROTO_DCERPC) < 0)
             goto error;
 
     } else if (data->flags & DETECT_BYTE_EXTRACT_FLAG_RELATIVE) {
@@ -307,7 +307,7 @@ static int DetectByteExtractSetup(DetectEngineCtx *de_ctx, Signature *s, const c
     }
 
     if (data->endian == EndianDCE) {
-        if (DetectSignatureSetAppProto(s, ALPROTO_DCERPC) != 0)
+        if (SCDetectSignatureSetAppProto(s, ALPROTO_DCERPC) != 0)
             goto error;
 
         if ((DETECT_BYTE_EXTRACT_FLAG_BASE | DETECT_BYTE_EXTRACT_FLAG_STRING) ==
@@ -327,7 +327,7 @@ static int DetectByteExtractSetup(DetectEngineCtx *de_ctx, Signature *s, const c
     if (data->local_id > de_ctx->byte_extract_max_local_id)
         de_ctx->byte_extract_max_local_id = data->local_id;
 
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_BYTE_EXTRACT, (SigMatchCtx *)data, sm_list) ==
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_BYTE_EXTRACT, (SigMatchCtx *)data, sm_list) ==
             NULL) {
         goto error;
     }

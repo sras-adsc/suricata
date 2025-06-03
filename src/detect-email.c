@@ -39,33 +39,19 @@ static int DetectMimeEmailFromSetup(DetectEngineCtx *de_ctx, Signature *s, const
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_from_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailFromData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailFromData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_from = NULL;
-        uint32_t b_email_from_len = 0;
-
-        if (tx->mime_state == NULL)
-            return NULL;
-
-        if (SCDetectMimeEmailGetData(tx->mime_state, &b_email_from, &b_email_from_len, "from") != 1)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_from, b_email_from_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "from") == 1);
 }
 
 static int DetectMimeEmailSubjectSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -73,34 +59,19 @@ static int DetectMimeEmailSubjectSetup(DetectEngineCtx *de_ctx, Signature *s, co
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_subject_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailSubjectData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailSubjectData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_sub = NULL;
-        uint32_t b_email_sub_len = 0;
-
-        if (tx->mime_state == NULL)
-            return NULL;
-
-        if (SCDetectMimeEmailGetData(tx->mime_state, &b_email_sub, &b_email_sub_len, "subject") !=
-                1)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_sub, b_email_sub_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "subject") == 1);
 }
 
 static int DetectMimeEmailToSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -108,35 +79,19 @@ static int DetectMimeEmailToSetup(DetectEngineCtx *de_ctx, Signature *s, const c
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_to_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailToData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailToData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_to = NULL;
-        uint32_t b_email_to_len = 0;
-
-        if ((tx->mime_state != NULL)) {
-            if (SCDetectMimeEmailGetData(tx->mime_state, &b_email_to, &b_email_to_len, "to") != 1)
-                return NULL;
-        }
-
-        if (b_email_to == NULL || b_email_to_len == 0)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_to, b_email_to_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "to") == 1);
 }
 
 static int DetectMimeEmailCcSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -144,33 +99,19 @@ static int DetectMimeEmailCcSetup(DetectEngineCtx *de_ctx, Signature *s, const c
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_cc_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailCcData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailCcData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_cc = NULL;
-        uint32_t b_email_cc_len = 0;
-
-        if (tx->mime_state == NULL)
-            return NULL;
-
-        if (SCDetectMimeEmailGetData(tx->mime_state, &b_email_cc, &b_email_cc_len, "cc") != 1)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_cc, b_email_cc_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "cc") == 1);
 }
 
 static int DetectMimeEmailDateSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -178,33 +119,19 @@ static int DetectMimeEmailDateSetup(DetectEngineCtx *de_ctx, Signature *s, const
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_date_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailDateData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailDateData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_date = NULL;
-        uint32_t b_email_date_len = 0;
-
-        if (tx->mime_state == NULL)
-            return NULL;
-
-        if (SCDetectMimeEmailGetData(tx->mime_state, &b_email_date, &b_email_date_len, "date") != 1)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_date, b_email_date_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "date") == 1);
 }
 
 static int DetectMimeEmailMessageIdSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -212,34 +139,19 @@ static int DetectMimeEmailMessageIdSetup(DetectEngineCtx *de_ctx, Signature *s, 
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_message_id_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailMessageIdData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailMessageIdData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_msg_id = NULL;
-        uint32_t b_email_msg_id_len = 0;
-
-        if (tx->mime_state == NULL)
-            return NULL;
-
-        if (SCDetectMimeEmailGetData(
-                    tx->mime_state, &b_email_msg_id, &b_email_msg_id_len, "message-id") != 1)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_msg_id, b_email_msg_id_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "message-id") == 1);
 }
 
 static int DetectMimeEmailXMailerSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -247,34 +159,19 @@ static int DetectMimeEmailXMailerSetup(DetectEngineCtx *de_ctx, Signature *s, co
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_x_mailer_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
 }
 
-static InspectionBuffer *GetMimeEmailXMailerData(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
+static bool GetMimeEmailXMailerData(
+        const void *txv, const uint8_t _flow_flags, const uint8_t **data, uint32_t *data_len)
 {
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        SMTPTransaction *tx = (SMTPTransaction *)txv;
-
-        const uint8_t *b_email_x_mailer = NULL;
-        uint32_t b_email_x_mailer_len = 0;
-
-        if (tx->mime_state == NULL)
-            return NULL;
-
-        if (SCDetectMimeEmailGetData(
-                    tx->mime_state, &b_email_x_mailer, &b_email_x_mailer_len, "x-mailer") != 1)
-            return NULL;
-
-        InspectionBufferSetup(det_ctx, list_id, buffer, b_email_x_mailer, b_email_x_mailer_len);
-        InspectionBufferApplyTransforms(det_ctx, buffer, transforms);
-    }
-    return buffer;
+    SMTPTransaction *tx = (SMTPTransaction *)txv;
+    if (tx->mime_state == NULL)
+        return false;
+    return (SCDetectMimeEmailGetData(tx->mime_state, data, data_len, "x-mailer") == 1);
 }
 
 static int DetectMimeEmailUrlSetup(DetectEngineCtx *de_ctx, Signature *s, const char *arg)
@@ -282,7 +179,7 @@ static int DetectMimeEmailUrlSetup(DetectEngineCtx *de_ctx, Signature *s, const 
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_url_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
@@ -307,7 +204,7 @@ static int DetectMimeEmailReceivedSetup(DetectEngineCtx *de_ctx, Signature *s, c
     if (SCDetectBufferSetActiveList(de_ctx, s, g_mime_email_received_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_SMTP) < 0)
         return -1;
 
     return 0;
@@ -337,8 +234,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.from";
     kw.Setup = DetectMimeEmailFromSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_from_buffer_id = DetectHelperBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_from_buffer_id = SCDetectHelperBufferMpmRegister(
             "email.from", "MIME EMAIL FROM", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailFromData);
 
     kw.name = "email.subject";
@@ -346,8 +243,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.subject";
     kw.Setup = DetectMimeEmailSubjectSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_subject_buffer_id = DetectHelperBufferMpmRegister("email.subject",
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_subject_buffer_id = SCDetectHelperBufferMpmRegister("email.subject",
             "MIME EMAIL SUBJECT", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailSubjectData);
 
     kw.name = "email.to";
@@ -355,8 +252,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.to";
     kw.Setup = DetectMimeEmailToSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_to_buffer_id = DetectHelperBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_to_buffer_id = SCDetectHelperBufferMpmRegister(
             "email.to", "MIME EMAIL TO", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailToData);
 
     kw.name = "email.cc";
@@ -364,8 +261,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.cc";
     kw.Setup = DetectMimeEmailCcSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_cc_buffer_id = DetectHelperBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_cc_buffer_id = SCDetectHelperBufferMpmRegister(
             "email.cc", "MIME EMAIL CC", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailCcData);
 
     kw.name = "email.date";
@@ -373,8 +270,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.date";
     kw.Setup = DetectMimeEmailDateSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_date_buffer_id = DetectHelperBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_date_buffer_id = SCDetectHelperBufferMpmRegister(
             "email.date", "MIME EMAIL DATE", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailDateData);
 
     kw.name = "email.message_id";
@@ -382,8 +279,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.message_id";
     kw.Setup = DetectMimeEmailMessageIdSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_message_id_buffer_id = DetectHelperBufferMpmRegister("email.message_id",
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_message_id_buffer_id = SCDetectHelperBufferMpmRegister("email.message_id",
             "MIME EMAIL Message-Id", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailMessageIdData);
 
     kw.name = "email.x_mailer";
@@ -391,8 +288,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.x_mailer";
     kw.Setup = DetectMimeEmailXMailerSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_x_mailer_buffer_id = DetectHelperBufferMpmRegister("email.x_mailer",
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_x_mailer_buffer_id = SCDetectHelperBufferMpmRegister("email.x_mailer",
             "MIME EMAIL X-Mailer", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailXMailerData);
 
     kw.name = "email.url";
@@ -400,8 +297,8 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.url";
     kw.Setup = DetectMimeEmailUrlSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_url_buffer_id = DetectHelperMultiBufferMpmRegister(
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_url_buffer_id = SCDetectHelperMultiBufferMpmRegister(
             "email.url", "MIME EMAIL URL", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailUrlData);
 
     kw.name = "email.received";
@@ -409,7 +306,7 @@ void DetectEmailRegister(void)
     kw.url = "/rules/email-keywords.html#email.received";
     kw.Setup = DetectMimeEmailReceivedSetup;
     kw.flags = SIGMATCH_NOOPT | SIGMATCH_INFO_STICKY_BUFFER;
-    DetectHelperKeywordRegister(&kw);
-    g_mime_email_received_buffer_id = DetectHelperMultiBufferMpmRegister("email.received",
+    SCDetectHelperKeywordRegister(&kw);
+    g_mime_email_received_buffer_id = SCDetectHelperMultiBufferMpmRegister("email.received",
             "MIME EMAIL RECEIVED", ALPROTO_SMTP, STREAM_TOSERVER, GetMimeEmailReceivedData);
 }

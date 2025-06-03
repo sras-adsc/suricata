@@ -15,11 +15,12 @@
  * 02110-1301, USA.
  */
 
-use super::{
-    DetectHelperTransformRegister, DetectSignatureAddTransform, InspectionBufferCheckAndExpand,
-    InspectionBufferLength, InspectionBufferPtr, InspectionBufferTruncate, SCTransformTableElmt,
-};
 use crate::detect::SIGMATCH_NOOPT;
+use suricata_sys::sys::{
+    DetectEngineCtx, DetectEngineThreadCtx, InspectionBuffer, SCDetectHelperTransformRegister,
+    SCDetectSignatureAddTransform, SCInspectionBufferCheckAndExpand, SCInspectionBufferTruncate,
+    SCTransformTableElmt, Signature,
+};
 
 use std::os::raw::{c_int, c_void};
 use std::ptr;
@@ -27,9 +28,9 @@ use std::ptr;
 static mut G_TRANSFORM_URL_DECODE_ID: c_int = 0;
 
 unsafe extern "C" fn url_decode_setup(
-    _de: *mut c_void, s: *mut c_void, _opt: *const std::os::raw::c_char,
+    _de: *mut DetectEngineCtx, s: *mut Signature, _opt: *const std::os::raw::c_char,
 ) -> c_int {
-    return DetectSignatureAddTransform(s, G_TRANSFORM_URL_DECODE_ID, ptr::null_mut());
+    return SCDetectSignatureAddTransform(s, G_TRANSFORM_URL_DECODE_ID, ptr::null_mut());
 }
 
 fn hex_value(i: u8) -> Option<u8> {
@@ -86,15 +87,17 @@ fn url_decode_transform_do(input: &[u8], output: &mut [u8]) -> u32 {
     return nb as u32;
 }
 
-unsafe extern "C" fn url_decode_transform(_det: *mut c_void, buffer: *mut c_void, _ctx: *mut c_void) {
-    let input = InspectionBufferPtr(buffer);
-    let input_len = InspectionBufferLength(buffer);
+unsafe extern "C" fn url_decode_transform(
+    _det: *mut DetectEngineThreadCtx, buffer: *mut InspectionBuffer, _ctx: *mut c_void,
+) {
+    let input = (*buffer).inspect;
+    let input_len = (*buffer).inspect_len;
     if input.is_null() || input_len == 0 {
         return;
     }
     let input = build_slice!(input, input_len as usize);
 
-    let output = InspectionBufferCheckAndExpand(buffer, input_len);
+    let output = SCInspectionBufferCheckAndExpand(buffer, input_len);
     if output.is_null() {
         // allocation failure
         return;
@@ -103,7 +106,7 @@ unsafe extern "C" fn url_decode_transform(_det: *mut c_void, buffer: *mut c_void
 
     let out_len = url_decode_transform_do(input, output);
 
-    InspectionBufferTruncate(buffer, out_len);
+    SCInspectionBufferTruncate(buffer, out_len);
 }
 
 #[no_mangle]
@@ -113,13 +116,14 @@ pub unsafe extern "C" fn DetectTransformUrlDecodeRegister() {
         desc: b"modify buffer to decode urlencoded data before inspection\0".as_ptr()
             as *const libc::c_char,
         url: b"/rules/transforms.html#url-decode\0".as_ptr() as *const libc::c_char,
-        Setup: url_decode_setup,
+        Setup: Some(url_decode_setup),
         flags: SIGMATCH_NOOPT,
-        Transform: url_decode_transform,
+        Transform: Some(url_decode_transform),
         Free: None,
         TransformValidate: None,
+        TransformId: None,
     };
-    G_TRANSFORM_URL_DECODE_ID = DetectHelperTransformRegister(&kw);
+    G_TRANSFORM_URL_DECODE_ID = SCDetectHelperTransformRegister(&kw);
     if G_TRANSFORM_URL_DECODE_ID < 0 {
         SCLogWarning!("Failed registering transform dot_prefix");
     }

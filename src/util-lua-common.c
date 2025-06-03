@@ -24,37 +24,17 @@
  */
 
 #include "suricata-common.h"
-#include "detect.h"
-#include "pkt-var.h"
-#include "conf.h"
 
 #include "threads.h"
 #include "threadvars.h"
-#include "tm-threads.h"
-
-#include "util-print.h"
-#include "util-unittest.h"
-
-#include "util-debug.h"
 
 #include "output.h"
-#include "app-layer-htp.h"
-#include "app-layer.h"
-#include "app-layer-parser.h"
-#include "util-privs.h"
-#include "util-buffer.h"
-#include "util-proto-name.h"
-#include "util-logopenfile.h"
-#include "util-time.h"
 #include "util-conf.h"
 
 #include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
 
 #include "util-lua.h"
 #include "util-lua-common.h"
-#include "action-globals.h"
 
 int LuaCallbackError(lua_State *luastate, const char *msg)
 {
@@ -142,197 +122,6 @@ static int LuaCallbackLogPath(lua_State *luastate)
     return LuaPushStringBuffer(luastate, (const uint8_t *)ld, strlen(ld));
 }
 
-static int LuaCallbackLogDebug(lua_State *luastate)
-{
-    const char *msg = LuaGetStringArgument(luastate, 1);
-    if (msg == NULL)
-        return LuaCallbackError(luastate, "1st argument missing, empty or wrong type");
-    SCLogDebug("%s", msg);
-    return 0;
-}
-
-static int LuaCallbackLogInfo(lua_State *luastate)
-{
-    const char *msg = LuaGetStringArgument(luastate, 1);
-    if (msg == NULL)
-        return LuaCallbackError(luastate, "1st argument missing, empty or wrong type");
-
-    lua_Debug ar;
-    lua_getstack(luastate, 1, &ar);
-    lua_getinfo(luastate, "nSl", &ar);
-    const char *funcname = ar.name ? ar.name : ar.what;
-    SCLogInfoRaw(ar.short_src, funcname, ar.currentline, "%s", msg);
-    return 0;
-}
-
-static int LuaCallbackLogNotice(lua_State *luastate)
-{
-    const char *msg = LuaGetStringArgument(luastate, 1);
-    if (msg == NULL)
-        return LuaCallbackError(luastate, "1st argument missing, empty or wrong type");
-
-    lua_Debug ar;
-    lua_getstack(luastate, 1, &ar);
-    lua_getinfo(luastate, "nSl", &ar);
-    const char *funcname = ar.name ? ar.name : ar.what;
-    SCLogNoticeRaw(ar.short_src, funcname, ar.currentline, "%s", msg);
-    return 0;
-}
-
-static int LuaCallbackLogWarning(lua_State *luastate)
-{
-    const char *msg = LuaGetStringArgument(luastate, 1);
-    if (msg == NULL)
-        return LuaCallbackError(luastate, "1st argument missing, empty or wrong type");
-
-    lua_Debug ar;
-    lua_getstack(luastate, 1, &ar);
-    lua_getinfo(luastate, "nSl", &ar);
-    const char *funcname = ar.name ? ar.name : ar.what;
-    SCLogWarningRaw(ar.short_src, funcname, ar.currentline, "%s", msg);
-    return 0;
-}
-
-static int LuaCallbackLogError(lua_State *luastate)
-{
-    const char *msg = LuaGetStringArgument(luastate, 1);
-    if (msg == NULL)
-        return LuaCallbackError(luastate, "1st argument missing, empty or wrong type");
-    lua_Debug ar;
-    lua_getstack(luastate, 1, &ar);
-    lua_getinfo(luastate, "nSl", &ar);
-    const char *funcname = ar.name ? ar.name : ar.what;
-    SCLogErrorRaw(ar.short_src, funcname, ar.currentline, "%s", msg);
-    return 0;
-}
-
-/** \internal
- *  \brief fill lua stack with file info
- *  \param luastate the lua state
- *  \param pa pointer to packet alert struct
- *  \retval cnt number of data items placed on the stack
- *
- *  Places: fileid (number), txid (number), name (string),
- *          size (number), magic (string), md5 in hex (string),
- *          sha1 (string), sha256 (string)
- */
-static int LuaCallbackFileInfoPushToStackFromFile(lua_State *luastate, const File *file)
-{
-    char *md5ptr = NULL;
-    char *sha1ptr = NULL;
-    char *sha256ptr = NULL;
-
-    char md5[33] = "";
-    md5ptr = md5;
-    if (file->flags & FILE_MD5) {
-        size_t x;
-        for (x = 0; x < sizeof(file->md5); x++) {
-            char one[3] = "";
-            snprintf(one, sizeof(one), "%02x", file->md5[x]);
-            strlcat(md5, one, sizeof(md5));
-        }
-    }
-    char sha1[41] = "";
-    sha1ptr = sha1;
-    if (file->flags & FILE_SHA1) {
-        size_t x;
-        for (x = 0; x < sizeof(file->sha1); x++) {
-            char one[3] = "";
-            snprintf(one, sizeof(one), "%02x", file->sha1[x]);
-            strlcat(sha1, one, sizeof(sha1));
-        }
-    }
-    char sha256[65] = "";
-    sha256ptr = sha256;
-    if (file->flags & FILE_SHA256) {
-        size_t x;
-        for (x = 0; x < sizeof(file->sha256); x++) {
-            char one[3] = "";
-            snprintf(one, sizeof(one), "%02x", file->sha256[x]);
-            strlcat(sha256, one, sizeof(sha256));
-        }
-    }
-
-    lua_Integer tx_id = LuaStateGetTxId(luastate);
-    lua_pushinteger(luastate, file->file_store_id);
-    lua_pushinteger(luastate, tx_id);
-    lua_pushlstring(luastate, (char *)file->name, file->name_len);
-    lua_pushinteger(luastate, FileTrackedSize(file));
-    lua_pushstring (luastate,
-#ifdef HAVE_MAGIC
-                    file->magic
-#else
-                    "nomagic"
-#endif
-                    );
-    lua_pushstring(luastate, md5ptr);
-    lua_pushstring(luastate, sha1ptr);
-    lua_pushstring(luastate, sha256ptr);
-    return 8;
-}
-
-/** \internal
- *  \brief Wrapper for getting tuple info into a lua script
- *  \retval cnt number of items placed on the stack
- */
-static int LuaCallbackFileInfo(lua_State *luastate)
-{
-    const File *file = LuaStateGetFile(luastate);
-    if (file == NULL)
-        return LuaCallbackError(luastate, "internal error: no file");
-
-    return LuaCallbackFileInfoPushToStackFromFile(luastate, file);
-}
-
-/** \internal
- *  \brief fill lua stack with file info
- *  \param luastate the lua state
- *  \param pa pointer to packet alert struct
- *  \retval cnt number of data items placed on the stack
- *
- *  Places: state (string), stored (bool)
- */
-static int LuaCallbackFileStatePushToStackFromFile(lua_State *luastate, const File *file)
-{
-    const char *state = "UNKNOWN";
-    switch (file->state) {
-        case FILE_STATE_CLOSED:
-            state = "CLOSED";
-            break;
-        case FILE_STATE_TRUNCATED:
-            state = "TRUNCATED";
-            break;
-        case FILE_STATE_ERROR:
-            state = "ERROR";
-            break;
-        case FILE_STATE_OPENED:
-            state = "OPENED";
-            break;
-        case FILE_STATE_NONE:
-            state = "NONE";
-            break;
-        case FILE_STATE_MAX:
-            break;
-    }
-
-    lua_pushstring (luastate, state);
-    lua_pushboolean (luastate, file->flags & FILE_STORED);
-    return 2;
-}
-
-/** \internal
- *  \brief Wrapper for getting tuple info into a lua script
- *  \retval cnt number of items placed on the stack
- */
-static int LuaCallbackFileState(lua_State *luastate)
-{
-    const File *file = LuaStateGetFile(luastate);
-    if (file == NULL)
-        return LuaCallbackError(luastate, "internal error: no file");
-
-    return LuaCallbackFileStatePushToStackFromFile(luastate, file);
-}
-
 /** \internal
  *  \brief fill lua stack with thread info
  *  \param luastate the lua state
@@ -371,22 +160,6 @@ int LuaRegisterFunctions(lua_State *luastate)
 
     lua_pushcfunction(luastate, LuaCallbackLogPath);
     lua_setglobal(luastate, "SCLogPath");
-
-    lua_pushcfunction(luastate, LuaCallbackLogDebug);
-    lua_setglobal(luastate, "SCLogDebug");
-    lua_pushcfunction(luastate, LuaCallbackLogInfo);
-    lua_setglobal(luastate, "SCLogInfo");
-    lua_pushcfunction(luastate, LuaCallbackLogNotice);
-    lua_setglobal(luastate, "SCLogNotice");
-    lua_pushcfunction(luastate, LuaCallbackLogWarning);
-    lua_setglobal(luastate, "SCLogWarning");
-    lua_pushcfunction(luastate, LuaCallbackLogError);
-    lua_setglobal(luastate, "SCLogError");
-
-    lua_pushcfunction(luastate, LuaCallbackFileInfo);
-    lua_setglobal(luastate, "SCFileInfo");
-    lua_pushcfunction(luastate, LuaCallbackFileState);
-    lua_setglobal(luastate, "SCFileState");
 
     lua_pushcfunction(luastate, LuaCallbackThreadInfo);
     lua_setglobal(luastate, "SCThreadInfo");

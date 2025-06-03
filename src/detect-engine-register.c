@@ -212,7 +212,10 @@
 #include "detect-ftp-command.h"
 #include "detect-entropy.h"
 #include "detect-ftp-command-data.h"
+#include "detect-ftp-completion-code.h"
 #include "detect-ftp-reply.h"
+#include "detect-ftp-mode.h"
+#include "detect-ftp-reply-received.h"
 
 #include "detect-bypass.h"
 #include "detect-ftpdata.h"
@@ -220,6 +223,7 @@
 
 #include "detect-transform-pcrexform.h"
 #include "detect-transform-base64.h"
+#include "detect-transform-luaxform.h"
 
 #include "util-rule-vars.h"
 
@@ -458,7 +462,7 @@ static void SigCleanCString(SigTableElmt *base)
     SCDetectSigMatchNamesFree(&kw);
 }
 
-void DetectHelperKeywordSetCleanCString(int id)
+void SCDetectHelperKeywordSetCleanCString(uint16_t id)
 {
     sigmatch_table[id].Cleanup = SigCleanCString;
 }
@@ -725,7 +729,10 @@ void SigTableSetup(void)
     DetectJa4HashRegister();
     DetectFtpCommandRegister();
     DetectFtpCommandDataRegister();
+    DetectFtpCompletionCodeRegister();
     DetectFtpReplyRegister();
+    DetectFtpModeRegister();
+    DetectFtpReplyReceivedRegister();
 
     DetectBypassRegister();
     DetectConfigRegister();
@@ -745,6 +752,7 @@ void SigTableSetup(void)
     DetectTransformHeaderLowercaseRegister();
     DetectTransformFromBase64DecodeRegister();
     SCDetectTransformDomainRegister();
+    DetectTransformLuaxformRegister();
 
     DetectFileHandlerRegister();
 
@@ -764,6 +772,7 @@ void SigTableSetup(void)
     SCDetectLdapRegister();
     SCDetectSdpRegister();
     SCDetectDNSRegister();
+    SCDetectPgsqlRegister();
 
     for (size_t i = 0; i < preregistered_callbacks_nb; i++) {
         PreregisteredCallbacks[i]();

@@ -55,14 +55,14 @@ static int DetectFtpCommandDataSetup(DetectEngineCtx *de_ctx, Signature *s, cons
     if (SCDetectBufferSetActiveList(de_ctx, s, g_ftp_cmd_data_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
         return -1;
 
     return 0;
 }
 
 static bool DetectFTPCommandDataGetData(
-        void *txv, const uint8_t _flow_flags, const uint8_t **buffer, uint32_t *buffer_len)
+        const void *txv, const uint8_t _flow_flags, const uint8_t **buffer, uint32_t *buffer_len)
 {
     FTPTransaction *tx = (FTPTransaction *)txv;
 
@@ -86,14 +86,6 @@ static bool DetectFTPCommandDataGetData(
     return false;
 }
 
-static InspectionBuffer *GetDataWrapper(DetectEngineThreadCtx *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *_f, const uint8_t _flow_flags, void *txv,
-        const int list_id)
-{
-    return DetectHelperGetData(
-            det_ctx, transforms, _f, _flow_flags, txv, list_id, DetectFTPCommandDataGetData);
-}
-
 void DetectFtpCommandDataRegister(void)
 {
     /* ftp.command sticky buffer */
@@ -104,8 +96,8 @@ void DetectFtpCommandDataRegister(void)
     sigmatch_table[DETECT_FTP_COMMAND_DATA].Setup = DetectFtpCommandDataSetup;
     sigmatch_table[DETECT_FTP_COMMAND_DATA].flags |= SIGMATCH_NOOPT;
 
-    DetectHelperBufferMpmRegister(
-            BUFFER_NAME, BUFFER_NAME, ALPROTO_FTP, STREAM_TOSERVER, GetDataWrapper);
+    SCDetectHelperBufferMpmRegister(
+            BUFFER_NAME, BUFFER_DESC, ALPROTO_FTP, STREAM_TOSERVER, DetectFTPCommandDataGetData);
 
     DetectBufferTypeSetDescriptionByName(BUFFER_NAME, BUFFER_DESC);
 

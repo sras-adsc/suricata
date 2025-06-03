@@ -62,6 +62,7 @@ static bool TlsAlpnGetData(DetectEngineThreadCtx *det_ctx, const void *txv, cons
 
     const SSLState *ssl_state = (SSLState *)txv;
     const SSLStateConnp *connp;
+    CStringData d;
 
     if (flags & STREAM_TOSERVER) {
         connp = &ssl_state->client_connp;
@@ -69,27 +70,13 @@ static bool TlsAlpnGetData(DetectEngineThreadCtx *det_ctx, const void *txv, cons
         connp = &ssl_state->server_connp;
     }
 
-    if (TAILQ_EMPTY(&connp->alpns)) {
-        return false;
-    }
-
-    SSLAlpns *a;
-    if (idx == 0) {
-        a = TAILQ_FIRST(&connp->alpns);
+    if (SCTLSHandshakeGetALPN(connp->hs, idx, &d)) {
+        *buf = d.data;
+        *buf_len = (uint32_t)d.len;
+        return true;
     } else {
-        // TODO optimize ?
-        a = TAILQ_FIRST(&connp->alpns);
-        for (uint32_t i = 0; i < idx; i++) {
-            a = TAILQ_NEXT(a, next);
-        }
-    }
-    if (a == NULL) {
         return false;
     }
-
-    *buf = a->alpn;
-    *buf_len = a->size;
-    return true;
 }
 
 /**
@@ -131,7 +118,7 @@ static int DetectTlsAlpnSetup(DetectEngineCtx *de_ctx, Signature *s, const char 
     if (SCDetectBufferSetActiveList(de_ctx, s, g_tls_alpn_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) < 0)
         return -1;
 
     return 0;

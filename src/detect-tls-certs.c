@@ -141,7 +141,7 @@ static int DetectTlsCertsSetup(DetectEngineCtx *de_ctx, Signature *s,
     if (SCDetectBufferSetActiveList(de_ctx, s, g_tls_certs_buffer_id) < 0)
         return -1;
 
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) < 0)
         return -1;
 
     return 0;
@@ -217,7 +217,7 @@ static void DetectTLSCertChainLenFree(DetectEngineCtx *de_ctx, void *ptr)
  */
 static int DetectTLSCertChainLenSetup(DetectEngineCtx *de_ctx, Signature *s, const char *rawstr)
 {
-    if (DetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_TLS) != 0)
         return -1;
 
     DetectU32Data *dd = DetectU32Parse(rawstr);
@@ -226,7 +226,7 @@ static int DetectTLSCertChainLenSetup(DetectEngineCtx *de_ctx, Signature *s, con
         return -1;
     }
 
-    if (SigMatchAppendSMToList(de_ctx, s, KEYWORD_ID, (SigMatchCtx *)dd, g_tls_cert_buffer_id) ==
+    if (SCSigMatchAppendSMToList(de_ctx, s, KEYWORD_ID, (SigMatchCtx *)dd, g_tls_cert_buffer_id) ==
             NULL) {
         SCDetectU32Free(dd);
         return -1;

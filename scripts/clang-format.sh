@@ -61,7 +61,7 @@ proper it provides additional functionality such as reformatting of all commits 
 
 Commands used in various situations:
 
-Formatting branch changes (compared to master):
+Formatting branch changes (compared to master or SURICATA_BRANCH env variable):
     branch          Format all changes in branch as additional commit
     rewrite-branch  Format every commit in branch and rewrite history
 
@@ -334,14 +334,15 @@ function HelpCommand {
     esac
 }
 
-# Return first commit of branch (off master).
+# Return first commit of branch (off master or SURICATA_BRANCH env variable).
 #
 # Use $first_commit^ if you need the commit on master we branched off.
 # Do not compare with master directly as it will diff with the latest commit
 # on master. If our branch has not been rebased on the latest master, this
 # would result in including all new commits on master!
 function FirstCommitOfBranch {
-    local first_commit=$(git rev-list origin/master..HEAD | tail -n 1)
+    start="${SURICATA_BRANCH:-origin/master}"
+    local first_commit=$(git rev-list $start..HEAD | tail -n 1)
     echo $first_commit
 }
 
@@ -543,7 +544,7 @@ function ReformatCommitsOnBranch {
         local first_commit=$(FirstCommitOfBranch)
         echo "First commit on branch: $first_commit"
         # Use --force in case it's run a second time on the same branch
-        git filter-branch --force --tree-filter "$GIT_CLANG_FORMAT $first_commit^" -- $first_commit..HEAD
+        git filter-branch --force --tree-filter "$GIT_CLANG_FORMAT --extensions c,h $first_commit^" -- $first_commit..HEAD
         if [ $? -ne 0 ]; then
             Die "Cannot rewrite branch. git filter-branch failed"
         fi

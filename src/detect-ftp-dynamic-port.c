@@ -61,7 +61,7 @@ static void DetectFtpDynamicPortFree(DetectEngineCtx *de_ctx, void *ptr)
 
 static int DetectFtpDynamicPortSetup(DetectEngineCtx *de_ctx, Signature *s, const char *str)
 {
-    if (DetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
+    if (SCDetectSignatureSetAppProto(s, ALPROTO_FTP) < 0)
         return -1;
 
     DetectU16Data *fdp = DetectFtpDynamicPortParse(str);
@@ -71,7 +71,7 @@ static int DetectFtpDynamicPortSetup(DetectEngineCtx *de_ctx, Signature *s, cons
     }
 
     SCLogDebug("low %u hi %u", fdp->arg1, fdp->arg2);
-    if (SigMatchAppendSMToList(de_ctx, s, DETECT_FTP_DYNPORT, (SigMatchCtx *)fdp,
+    if (SCSigMatchAppendSMToList(de_ctx, s, DETECT_FTP_DYNPORT, (SigMatchCtx *)fdp,
                 g_ftp_dynport_buffer_id) == NULL) {
         DetectFtpDynamicPortFree(de_ctx, fdp);
         return -1;
@@ -110,6 +110,8 @@ void DetectFtpDynamicPortRegister(void)
 
     DetectAppLayerInspectEngineRegister(
             BUFFER_NAME, ALPROTO_FTP, SIG_FLAG_TOSERVER, 0, DetectEngineInspectGenericList, NULL);
+
+    DetectBufferTypeSetDescriptionByName(BUFFER_NAME, BUFFER_DESC);
 
     g_ftp_dynport_buffer_id = DetectBufferTypeGetByName(BUFFER_NAME);
 

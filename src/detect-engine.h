@@ -27,26 +27,6 @@
 #include "detect.h"
 #include "suricata.h"
 
-void InspectionBufferInit(InspectionBuffer *buffer, uint32_t initial_size);
-void InspectionBufferSetup(DetectEngineThreadCtx *det_ctx, const int list_id,
-        InspectionBuffer *buffer, const uint8_t *data, const uint32_t data_len);
-void InspectionBufferSetupAndApplyTransforms(DetectEngineThreadCtx *det_ctx, const int list_id,
-        InspectionBuffer *buffer, const uint8_t *data, const uint32_t data_len,
-        const DetectEngineTransforms *transforms);
-void InspectionBufferFree(InspectionBuffer *buffer);
-void *InspectionBufferCheckAndExpand(InspectionBuffer *buffer, uint32_t min_size);
-void InspectionBufferTruncate(InspectionBuffer *buffer, uint32_t buf_len);
-void InspectionBufferCopy(InspectionBuffer *buffer, uint8_t *buf, uint32_t buf_len);
-void InspectionBufferApplyTransforms(DetectEngineThreadCtx *det_ctx, InspectionBuffer *buffer,
-        const DetectEngineTransforms *transforms);
-void InspectionBufferClean(DetectEngineThreadCtx *det_ctx);
-InspectionBuffer *InspectionBufferGet(DetectEngineThreadCtx *det_ctx, const int list_id);
-void InspectionBufferSetupMultiEmpty(InspectionBuffer *buffer);
-void InspectionBufferSetupMulti(DetectEngineThreadCtx *det_ctx, InspectionBuffer *buffer,
-        const DetectEngineTransforms *transforms, const uint8_t *data, const uint32_t data_len);
-InspectionBuffer *InspectionBufferMultipleForListGet(
-        DetectEngineThreadCtx *det_ctx, const int list_id, uint32_t local_id);
-
 /* start up registry funcs */
 
 int DetectBufferTypeRegister(const char *name);
@@ -151,6 +131,13 @@ uint8_t DetectEngineInspectBufferGeneric(DetectEngineCtx *de_ctx, DetectEngineTh
         const DetectEngineAppInspectionEngine *engine, const Signature *s, Flow *f, uint8_t flags,
         void *alstate, void *txv, uint64_t tx_id);
 
+uint8_t DetectEngineInspectBufferSingle(DetectEngineCtx *de_ctx, DetectEngineThreadCtx *det_ctx,
+        const DetectEngineAppInspectionEngine *engine, const Signature *s, Flow *f, uint8_t flags,
+        void *alstate, void *txv, uint64_t tx_id);
+
+InspectionBuffer *DetectGetSingleData(struct DetectEngineThreadCtx_ *det_ctx,
+        const DetectEngineTransforms *transforms, Flow *f, const uint8_t flow_flags, void *txv,
+        const int list_id, InspectionSingleBufferGetDataPtr GetBuf);
 InspectionBuffer *DetectGetMultiData(struct DetectEngineThreadCtx_ *det_ctx,
         const DetectEngineTransforms *transforms, Flow *f, const uint8_t flow_flags, void *txv,
         const int list_id, uint32_t index, InspectionMultiBufferGetDataPtr GetBuf);
@@ -175,6 +162,9 @@ int DetectEngineInspectPktBufferGeneric(
  */
 void DetectAppLayerInspectEngineRegister(const char *name, AppProto alproto, uint32_t dir,
         int progress, InspectEngineFuncPtr Callback2, InspectionBufferGetDataPtr GetData);
+
+void DetectAppLayerInspectEngineRegisterSingle(const char *name, AppProto alproto, uint32_t dir,
+        int progress, InspectEngineFuncPtr Callback2, InspectionSingleBufferGetDataPtr GetData);
 
 void DetectAppLayerMultiRegister(const char *name, AppProto alproto, uint32_t dir, int progress,
         InspectionMultiBufferGetDataPtr GetData, int priority);

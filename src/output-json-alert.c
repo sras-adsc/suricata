@@ -564,6 +564,8 @@ void EveAddVerdict(SCJsonBuilder *jb, const Packet *p)
 
     } else if (PacketCheckAction(p, ACTION_DROP) && EngineModeIsIPS()) {
         JB_SET_STRING(jb, "action", "drop");
+    } else if (PacketCheckAction(p, ACTION_ACCEPT)) {
+        JB_SET_STRING(jb, "action", "accept");
     } else if (p->alerts.alerts[p->alerts.cnt].action & ACTION_PASS) {
         JB_SET_STRING(jb, "action", "pass");
     } else {
@@ -1007,6 +1009,10 @@ static void JsonAlertLogSetupMetadata(AlertJsonOutputCtx *json_output_ctx, SCCon
                 SCLogError("Error parsing "
                            "payload-buffer-size - %s. Killing engine",
                         payload_buffer_value);
+                exit(EXIT_FAILURE);
+            } else if (value == 0) {
+                // you should not ask for payload if you want 0 of it
+                SCLogError("Error payload-buffer-size should not be 0");
                 exit(EXIT_FAILURE);
             } else {
                 payload_buffer_size = value;

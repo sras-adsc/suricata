@@ -29,8 +29,9 @@
 #include "detect-engine-prefilter.h"
 #include "detect-parse.h"
 #include "detect-engine-content-inspection.h"
+#include "rust.h"
 
-int DetectHelperBufferRegister(const char *name, AppProto alproto, uint8_t direction)
+int SCDetectHelperBufferRegister(const char *name, AppProto alproto, uint8_t direction)
 {
     if (direction & STREAM_TOSERVER) {
         DetectAppLayerInspectEngineRegister(
@@ -43,45 +44,27 @@ int DetectHelperBufferRegister(const char *name, AppProto alproto, uint8_t direc
     return DetectBufferTypeRegister(name);
 }
 
-InspectionBuffer *DetectHelperGetData(struct DetectEngineThreadCtx_ *det_ctx,
-        const DetectEngineTransforms *transforms, Flow *f, const uint8_t flow_flags, void *txv,
-        const int list_id,
-        bool (*GetBuf)(void *txv, const uint8_t flow_flags, const uint8_t **buf, uint32_t *buf_len))
-{
-    InspectionBuffer *buffer = InspectionBufferGet(det_ctx, list_id);
-    if (buffer->inspect == NULL) {
-        const uint8_t *b = NULL;
-        uint32_t b_len = 0;
-
-        if (!GetBuf(txv, flow_flags, &b, &b_len))
-            return NULL;
-
-        InspectionBufferSetupAndApplyTransforms(det_ctx, list_id, buffer, b, b_len, transforms);
-    }
-    return buffer;
-}
-
-int DetectHelperBufferMpmRegister(const char *name, const char *desc, AppProto alproto,
-        uint8_t direction, InspectionBufferGetDataPtr GetData)
+int SCDetectHelperBufferMpmRegister(const char *name, const char *desc, AppProto alproto,
+        uint8_t direction, InspectionSingleBufferGetDataPtr GetData)
 {
     if (direction & STREAM_TOSERVER) {
-        DetectAppLayerInspectEngineRegister(
-                name, alproto, SIG_FLAG_TOSERVER, 0, DetectEngineInspectBufferGeneric, GetData);
-        DetectAppLayerMpmRegister(
-                name, SIG_FLAG_TOSERVER, 2, PrefilterGenericMpmRegister, GetData, alproto, 0);
+        DetectAppLayerInspectEngineRegisterSingle(
+                name, alproto, SIG_FLAG_TOSERVER, 0, DetectEngineInspectBufferSingle, GetData);
+        DetectAppLayerMpmRegisterSingle(
+                name, SIG_FLAG_TOSERVER, 2, PrefilterSingleMpmRegister, GetData, alproto, 0);
     }
     if (direction & STREAM_TOCLIENT) {
-        DetectAppLayerInspectEngineRegister(
-                name, alproto, SIG_FLAG_TOCLIENT, 0, DetectEngineInspectBufferGeneric, GetData);
-        DetectAppLayerMpmRegister(
-                name, SIG_FLAG_TOCLIENT, 2, PrefilterGenericMpmRegister, GetData, alproto, 0);
+        DetectAppLayerInspectEngineRegisterSingle(
+                name, alproto, SIG_FLAG_TOCLIENT, 0, DetectEngineInspectBufferSingle, GetData);
+        DetectAppLayerMpmRegisterSingle(
+                name, SIG_FLAG_TOCLIENT, 2, PrefilterSingleMpmRegister, GetData, alproto, 0);
     }
     DetectBufferTypeSetDescriptionByName(name, desc);
     return DetectBufferTypeGetByName(name);
 }
 
-int DetectHelperMultiBufferProgressMpmRegister(const char *name, const char *desc, AppProto alproto,
-        uint8_t direction, InspectionMultiBufferGetDataPtr GetData, int progress)
+int SCDetectHelperMultiBufferProgressMpmRegister(const char *name, const char *desc,
+        AppProto alproto, uint8_t direction, InspectionMultiBufferGetDataPtr GetData, int progress)
 {
     if (direction & STREAM_TOSERVER) {
         DetectAppLayerMultiRegister(name, alproto, SIG_FLAG_TOSERVER, progress, GetData, 2);
@@ -94,10 +77,10 @@ int DetectHelperMultiBufferProgressMpmRegister(const char *name, const char *des
     return DetectBufferTypeGetByName(name);
 }
 
-int DetectHelperMultiBufferMpmRegister(const char *name, const char *desc, AppProto alproto,
+int SCDetectHelperMultiBufferMpmRegister(const char *name, const char *desc, AppProto alproto,
         uint8_t direction, InspectionMultiBufferGetDataPtr GetData)
 {
-    return DetectHelperMultiBufferProgressMpmRegister(name, desc, alproto, direction, GetData, 0);
+    return SCDetectHelperMultiBufferProgressMpmRegister(name, desc, alproto, direction, GetData, 0);
 }
 
 int SCDetectHelperNewKeywordId(void)
@@ -117,7 +100,7 @@ int SCDetectHelperNewKeywordId(void)
     return DETECT_TBLSIZE_IDX - 1;
 }
 
-int DetectHelperKeywordRegister(const SCSigTableAppLiteElmt *kw)
+uint16_t SCDetectHelperKeywordRegister(const SCSigTableAppLiteElmt *kw)
 {
     int keyword_id = SCDetectHelperNewKeywordId();
     if (keyword_id < 0) {
@@ -135,15 +118,15 @@ int DetectHelperKeywordRegister(const SCSigTableAppLiteElmt *kw)
             (int (*)(DetectEngineCtx * de, Signature * s, const char *raw)) kw->Setup;
     sigmatch_table[keyword_id].Free = (void (*)(DetectEngineCtx * de, void *ptr)) kw->Free;
 
-    return keyword_id;
+    return (uint16_t)keyword_id;
 }
 
-void DetectHelperKeywordAliasRegister(int kwid, const char *alias)
+void SCDetectHelperKeywordAliasRegister(uint16_t kwid, const char *alias)
 {
     sigmatch_table[kwid].alias = alias;
 }
 
-int DetectHelperTransformRegister(const SCTransformTableElmt *kw)
+int SCDetectHelperTransformRegister(const SCTransformTableElmt *kw)
 {
     int transform_id = SCDetectHelperNewKeywordId();
     if (transform_id < 0) {
@@ -162,16 +145,8 @@ int DetectHelperTransformRegister(const SCTransformTableElmt *kw)
     sigmatch_table[transform_id].Setup =
             (int (*)(DetectEngineCtx * de, Signature * s, const char *raw)) kw->Setup;
     sigmatch_table[transform_id].Free = (void (*)(DetectEngineCtx * de, void *ptr)) kw->Free;
+    sigmatch_table[transform_id].TransformId =
+            (void (*)(const uint8_t **id_data, uint32_t *length, void *context))kw->TransformId;
 
     return transform_id;
-}
-
-const uint8_t *InspectionBufferPtr(InspectionBuffer *buf)
-{
-    return buf->inspect;
-}
-
-uint32_t InspectionBufferLength(InspectionBuffer *buf)
-{
-    return buf->inspect_len;
 }
